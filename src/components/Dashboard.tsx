@@ -200,7 +200,7 @@ export default function Dashboard({ onShowProfile, onShowBrain }: DashboardProps
   };
 
   const handleRetryRecording = async (recording: any, analysis: any) => {
-    const WEBHOOK_URL = "https://n8nautomation.site/webhook/ad2aa239-7a2f-467d-a95a-a66a2ca43537";
+    const WEBHOOK_URL = "https://lfpsgpumofgdhpihzqgp.supabase.co/functions/v1/webhook-proxy";
     const { supabase } = await import('@/lib/supabase');
     
     try {

@@ -63,10 +63,6 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
                 className="h-12 cursor-pointer hover:opacity-90 transition-opacity duration-300" 
                 onClick={() => window.location.href = '/'}
               />
-              <div>
-                <span className="text-xl font-semibold tracking-wide text-primary">Ceipal</span>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">AI Voice Intelligence</p>
-              </div>
             </div>
             <div>
               <Button 

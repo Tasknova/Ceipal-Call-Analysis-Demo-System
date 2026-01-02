@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase, CompanyBrain, BrainDocument, DocumentGroup } from "@/lib/supabase";
+import { storeEmbedding, prepareCompanyInfoForEmbedding, chunkText } from "@/lib/embeddings";
 import { 
   Brain, 
   Save, 
@@ -107,11 +108,18 @@ export default function BrainPage({ onBack }: BrainPageProps) {
   const [isEditGroupDialogOpen, setIsEditGroupDialogOpen] = useState(false);
   const [documentsTabView, setDocumentsTabView] = useState("files");
   
+  // Additional context editing
+  const [isEditingContext, setIsEditingContext] = useState(false);
+  const [isSavingContext, setIsSavingContext] = useState(false);
+  
   // Move document
   const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
   const [documentToMove, setDocumentToMove] = useState<BrainDocument | null>(null);
   const [moveToGroupId, setMoveToGroupId] = useState("");
   const [groupSearchQuery, setGroupSearchQuery] = useState("");
+  
+  // Regenerate embeddings
+  const [isRegeneratingEmbeddings, setIsRegeneratingEmbeddings] = useState(false);
 
   // Temporary arrays for editing
   const [coreValueInput, setCoreValueInput] = useState("");
@@ -212,6 +220,30 @@ export default function BrainPage({ onBack }: BrainPageProps) {
         if (error) throw error;
       }
 
+      // Generate and store embeddings for company info
+      try {
+        const content = prepareCompanyInfoForEmbedding(formData);
+        
+        // Delete old embeddings for this user's company info
+        await supabase
+          .from('company_brain_embeddings')
+          .delete()
+          .eq('user_id', user?.id)
+          .eq('content_type', 'company_info');
+        
+        // Store new embedding
+        await storeEmbedding(supabase, {
+          user_id: user?.id!,
+          content_type: 'company_info',
+          content_id: existingData?.id,
+          content: content,
+          metadata: { source: 'company_brain_form' }
+        });
+      } catch (embeddingError) {
+        console.warn('Failed to generate embeddings:', embeddingError);
+        // Don't fail the save if embeddings fail
+      }
+
       setIsEditing(false);
       toast({
         title: "Success",
@@ -304,7 +336,7 @@ export default function BrainPage({ onBack }: BrainPageProps) {
         : [];
 
       // Save to database with new fields
-      const { error: dbError } = await supabase
+      const { data: insertedDoc, error: dbError } = await supabase
         .from('brain_documents')
         .insert([{
           user_id: user?.id,
@@ -319,9 +351,41 @@ export default function BrainPage({ onBack }: BrainPageProps) {
           category: uploadFormData.category || null,
           document_group_id: uploadFormData.documentGroupId || null,
           status: 'uploaded'
-        }]);
+        }])
+        .select()
+        .single();
 
       if (dbError) throw dbError;
+
+      // Generate and store embedding for document metadata
+      if (insertedDoc?.id) {
+        try {
+          const embeddingContent = [
+            `File: ${selectedFile.name}`,
+            uploadFormData.description ? `Description: ${uploadFormData.description}` : '',
+            uploadFormData.category ? `Category: ${uploadFormData.category}` : '',
+            tagsArray.length > 0 ? `Tags: ${tagsArray.join(', ')}` : '',
+            `Type: ${fileType}`
+          ].filter(Boolean).join('\n');
+
+          await storeEmbedding({
+            userId: user?.id || '',
+            contentType: 'document',
+            contentId: insertedDoc.id,
+            content: embeddingContent,
+            metadata: {
+              file_name: selectedFile.name,
+              file_type: fileType,
+              category: uploadFormData.category,
+              tags: tagsArray,
+              storage_url: urlData.publicUrl
+            }
+          });
+        } catch (embError) {
+          console.error('Error generating document embedding:', embError);
+          // Don't fail the upload if embedding fails
+        }
+      }
 
       toast({
         title: "Success",
@@ -454,6 +518,80 @@ export default function BrainPage({ onBack }: BrainPageProps) {
     }
   };
 
+  const handleSaveContext = async () => {
+    setIsSavingContext(true);
+    try {
+      const { data: existingData } = await supabase
+        .from('company_brain')
+        .select('id')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (existingData) {
+        const { error } = await supabase
+          .from('company_brain')
+          .update({ additional_context: formData.additional_context })
+          .eq('user_id', user?.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('company_brain')
+          .insert([{ user_id: user?.id, additional_context: formData.additional_context }]);
+
+        if (error) throw error;
+      }
+
+      // Generate and store embeddings for additional context
+      if (formData.additional_context && formData.additional_context.trim()) {
+        try {
+          // Delete old embeddings for additional context
+          await supabase
+            .from('company_brain_embeddings')
+            .delete()
+            .eq('user_id', user?.id)
+            .eq('content_type', 'additional_context');
+          
+          // Chunk large text
+          const chunks = chunkText(formData.additional_context, 1000);
+          
+          // Store each chunk as a separate embedding
+          for (let i = 0; i < chunks.length; i++) {
+            await storeEmbedding(supabase, {
+              user_id: user?.id!,
+              content_type: 'additional_context',
+              content_id: existingData?.id,
+              content: chunks[i],
+              metadata: { 
+                source: 'additional_context_tab',
+                chunk_index: i,
+                total_chunks: chunks.length
+              }
+            });
+          }
+        } catch (embeddingError) {
+          console.warn('Failed to generate embeddings:', embeddingError);
+        }
+      }
+
+      setIsEditingContext(false);
+      toast({
+        title: "Success",
+        description: "Additional context saved successfully"
+      });
+      loadBrainData();
+    } catch (error) {
+      console.error('Error saving context:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save additional context",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSavingContext(false);
+    }
+  };
+
   const handleMoveDocument = async () => {
     if (!documentToMove) return;
 
@@ -493,6 +631,13 @@ export default function BrainPage({ onBack }: BrainPageProps) {
         .from('brain-documents')
         .remove([doc.storage_path]);
 
+      // Delete embeddings for this document
+      await supabase
+        .from('company_brain_embeddings')
+        .delete()
+        .eq('content_type', 'document')
+        .eq('content_id', doc.id);
+
       // Delete from database
       const { error } = await supabase
         .from('brain_documents')
@@ -513,6 +658,47 @@ export default function BrainPage({ onBack }: BrainPageProps) {
         description: "Failed to delete document",
         variant: "destructive"
       });
+    }
+  };
+
+  const handleRegenerateEmbeddings = async () => {
+    if (!confirm('Regenerate all embeddings? This will recreate embeddings for all company data and documents.')) return;
+
+    setIsRegeneratingEmbeddings(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/regenerate-embeddings`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to regenerate embeddings');
+      }
+
+      const result = await response.json();
+      
+      toast({
+        title: "Success",
+        description: `Regenerated embeddings for ${result.stats?.total_processed || 0} items`
+      });
+    } catch (error) {
+      console.error('Error regenerating embeddings:', error);
+      toast({
+        title: "Error",
+        description: "Failed to regenerate embeddings",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRegeneratingEmbeddings(false);
     }
   };
 
@@ -577,24 +763,52 @@ export default function BrainPage({ onBack }: BrainPageProps) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {!isEditing ? (
-                <Button onClick={() => setIsEditing(true)} variant="outline">
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-              ) : (
+              {activeTab === "form" && (
                 <>
-                  <Button onClick={() => { setIsEditing(false); loadBrainData(); }} variant="outline">
-                    Cancel
-                  </Button>
-                  <Button onClick={handleSave} disabled={isSaving}>
-                    {isSaving ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4 mr-2" />
-                    )}
-                    Save
-                  </Button>
+                  {!isEditing ? (
+                    <Button onClick={() => setIsEditing(true)} variant="outline">
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                  ) : (
+                    <>
+                      <Button onClick={() => { setIsEditing(false); loadBrainData(); }} variant="outline">
+                        Cancel
+                      </Button>
+                      <Button onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4 mr-2" />
+                        )}
+                        Save
+                      </Button>
+                    </>
+                  )}
+                </>
+              )}
+              {activeTab === "context" && (
+                <>
+                  {!isEditingContext ? (
+                    <Button onClick={() => setIsEditingContext(true)} variant="outline">
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                  ) : (
+                    <>
+                      <Button onClick={() => { setIsEditingContext(false); loadBrainData(); }} variant="outline">
+                        Cancel
+                      </Button>
+                      <Button onClick={handleSaveContext} disabled={isSavingContext}>
+                        {isSavingContext ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4 mr-2" />
+                        )}
+                        Save
+                      </Button>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -982,7 +1196,7 @@ export default function BrainPage({ onBack }: BrainPageProps) {
                     <Sparkles className="h-5 w-5 text-purple-600" />
                     <div>
                       <CardTitle>Additional Context</CardTitle>
-                      <CardDescription>Extra information for AI training</CardDescription>
+                      <CardDescription>Extra information for AI training - supports text and images</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
@@ -992,13 +1206,13 @@ export default function BrainPage({ onBack }: BrainPageProps) {
                     <Textarea
                       value={formData.additional_context || ""}
                       onChange={(e) => setFormData({ ...formData, additional_context: e.target.value })}
-                      disabled={!isEditing}
-                      placeholder="Add any additional information that would help the AI understand your business better...&#10;&#10;Examples:&#10;- Company history and milestones&#10;- Key partnerships or collaborations&#10;- Unique processes or methodologies&#10;- Industry-specific terminology&#10;- Common customer questions and answers&#10;- Brand voice and communication style"
+                      disabled={!isEditingContext}
+                      placeholder="Add any additional information that would help the AI understand your business better...&#10;&#10;Examples:&#10;- Company history and milestones&#10;- Key partnerships or collaborations&#10;- Unique processes or methodologies&#10;- Industry-specific terminology&#10;- Common customer questions and answers&#10;- Brand voice and communication style&#10;&#10;You can paste text directly here. Click Edit button above to start editing."
                       rows={20}
                       className="font-mono text-sm"
                     />
                     <p className="text-xs text-muted-foreground">
-                      This information will be used to train the AI bot to better answer questions about your company. The more detailed and specific you are, the better the AI will perform.
+                      💡 Tip: Click the Edit button above to start typing or pasting content. This information will be used to train the AI bot to better answer questions about your company. For images and documents, use the Documents tab.
                     </p>
                   </div>
                 </CardContent>
@@ -1055,6 +1269,24 @@ export default function BrainPage({ onBack }: BrainPageProps) {
                       >
                         <Plus className="h-4 w-4 mr-2" />
                         New Group
+                      </Button>
+                      <Button
+                        onClick={handleRegenerateEmbeddings}
+                        variant="outline"
+                        size="sm"
+                        disabled={isRegeneratingEmbeddings}
+                      >
+                        {isRegeneratingEmbeddings ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Regenerating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Regenerate Embeddings
+                          </>
+                        )}
                       </Button>
                       {selectedGroupFilter !== "all" && (
                         <Button

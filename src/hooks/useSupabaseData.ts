@@ -312,8 +312,18 @@ export function useDeleteRecording() {
     mutationFn: async (recordingId: string) => {
       if (!user) throw new Error('User not authenticated')
       
-      // Delete the recording (analyses will be deleted automatically due to CASCADE)
-      // RLS policies ensure users can only delete their own recordings
+      // First, delete all related analyses
+      const { error: analysisError } = await supabase
+        .from('analyses')
+        .delete()
+        .eq('recording_id', recordingId)
+      
+      if (analysisError) {
+        console.error('Error deleting analyses:', analysisError)
+        // Continue anyway - the recording might not have analyses
+      }
+      
+      // Then delete the recording
       const { error } = await supabase
         .from('recordings')
         .delete()
