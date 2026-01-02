@@ -275,9 +275,12 @@ export default function Dashboard({ onShowProfile, onShowBrain }: DashboardProps
       <header className="border-b border-border bg-card px-8 py-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-6">
-            <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity duration-300" onClick={() => navigate('/')}>
-              <span className="text-white font-bold text-xl">C</span>
-            </div>
+            <img 
+              src="/ceipal_logo.png" 
+              alt="Ceipal Logo" 
+              className="h-12 cursor-pointer hover:opacity-90 transition-opacity duration-300" 
+              onClick={() => navigate('/')}
+            />
             <div className="border-l border-border pl-6">
               <h1 className="text-xl font-semibold text-primary tracking-wide">Ceipal Voice Intelligence</h1>
               <p className="text-xs text-muted-foreground">AI Powered. People Driven.</p>

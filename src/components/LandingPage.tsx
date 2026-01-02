@@ -57,9 +57,12 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         <div className="max-w-7xl mx-auto px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity duration-300" onClick={() => window.location.href = '/'}>
-                <span className="text-white font-bold text-xl">C</span>
-              </div>
+              <img 
+                src="/ceipal_logo.png" 
+                alt="Ceipal Logo" 
+                className="h-12 cursor-pointer hover:opacity-90 transition-opacity duration-300" 
+                onClick={() => window.location.href = '/'}
+              />
               <div>
                 <span className="text-xl font-semibold tracking-wide text-primary">Ceipal</span>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">AI Voice Intelligence</p>
@@ -86,12 +89,12 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
                 <div className="h-px w-12 bg-gradient-to-r from-primary to-accent-blue mr-4"></div>
                 <span className="text-sm tracking-widest text-muted-foreground uppercase">AI Powered. People Driven.</span>
               </div>
-              <h1 className="text-6xl font-bold leading-tight tracking-tight">
+              <h1 className="text-6xl font-bold leading-tight tracking-tight text-primary">
                 Transform
                 <br />
-                <span className="text-primary">Talent Acquisition</span>
+                Talent Acquisition
                 <br />
-                <span className="text-accent-blue">with AI</span>
+                with AI
               </h1>
               <p className="text-lg text-muted-foreground leading-relaxed max-w-lg">
                 AI-powered voice analysis platform built for recruiters and staffing agencies. 
@@ -285,9 +288,11 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         <div className="mx-auto max-w-6xl">
           <div className="flex flex-col md:flex-row items-center justify-between">
             <div className="flex items-center space-x-3 mb-4 md:mb-0">
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center">
-                <span className="text-white font-bold text-lg">C</span>
-              </div>
+              <img 
+                src="/ceipal_logo.png" 
+                alt="Ceipal Logo" 
+                className="h-10"
+              />
               <div>
                 <p className="font-semibold text-foreground">Ceipal</p>
                 <p className="text-sm text-muted-foreground">AI Powered. People Driven.</p>

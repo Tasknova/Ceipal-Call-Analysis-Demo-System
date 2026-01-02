@@ -137,6 +137,15 @@ export interface CompanyBrain {
   updated_at: string
 }
 
+export interface DocumentGroup {
+  id: string
+  user_id: string
+  group_name: string
+  description?: string
+  created_at: string
+  updated_at: string
+}
+
 export interface BrainDocument {
   id: string
   user_id: string
@@ -147,10 +156,10 @@ export interface BrainDocument {
   storage_path: string
   storage_url?: string
   mime_type?: string
-  title?: string
   description?: string
   tags?: string[]
   category?: string
+  document_group_id?: string
   status?: string
   extracted_text?: string
   created_at: string

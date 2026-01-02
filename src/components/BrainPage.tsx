@@ -9,9 +9,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase, CompanyBrain, BrainDocument } from "@/lib/supabase";
+import { supabase, CompanyBrain, BrainDocument, DocumentGroup } from "@/lib/supabase";
 import { 
   Brain, 
   Save, 
@@ -30,7 +32,9 @@ import {
   Users,
   Sparkles,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  MoreHorizontal,
+  Move
 } from "lucide-react";
 
 interface BrainPageProps {
@@ -53,37 +57,61 @@ export default function BrainPage({ onBack }: BrainPageProps) {
 
   // Form data
   const [formData, setFormData] = useState<Partial<CompanyBrain>>({
-    company_name: "",
-    company_tagline: "",
-    company_description: "",
-    industry: "",
-    founded_year: undefined,
-    company_size: "",
-    headquarters_location: "",
-    website_url: "",
-    contact_email: "",
-    contact_phone: "",
-    mission_statement: "",
-    vision_statement: "",
-    core_values: [],
-    unique_selling_points: [],
-    target_audience: "",
+    company_name: "CEIPAL",
+    company_tagline: "Intelligent Talent Cloud for Recruiting and Workforce Management",
+    company_description: "CEIPAL is a cloud-native AI-powered talent platform that helps enterprises and staffing agencies automate recruiting, applicant tracking, candidate sourcing, vendor management, and workforce operations. The platform unifies ATS, CRM, VMS, and workforce tools into a single system, enabling faster hiring, improved talent engagement, deeper analytics, and better operational visibility.",
+    industry: "HR Tech | SaaS | Talent Management | Recruitment Software",
+    founded_year: 2015,
+    company_size: "500–1000 employees",
+    headquarters_location: "New Jersey, USA",
+    website_url: "https://www.ceipal.com",
+    contact_email: "contact@ceipal.com",
+    contact_phone: "+1 (844) 234-2455",
+    mission_statement: "To transform hiring and workforce management with intelligent automation, enabling organizations to build better talent experiences and achieve operational excellence.",
+    vision_statement: "To be the world's most trusted platform for talent acquisition and workforce orchestration, powered by data and AI.",
+    core_values: ["Innovation", "Customer Success", "Integrity", "Collaboration", "Continuous Learning"],
+    unique_selling_points: ["AI-powered talent matching and ranking", "Unified ATS + VMS platform", "End-to-end workforce automation", "Real-time analytics and reporting"],
+    target_audience: "Staffing firms, enterprise HR teams, MSPs, talent acquisition leaders, operations managers",
     products_services: {},
-    pricing_model: "",
-    key_features: [],
-    founder_info: "",
+    pricing_model: "Subscription (SaaS)",
+    key_features: ["AI candidate matching and ranking", "Applicant tracking system (ATS)", "Vendor management system (VMS)", "Workforce management tools", "Recruitment CRM", "Real-time analytics and dashboards", "Resume parsing and job board integrations", "Compliance and credentialing"],
+    founder_info: "CEIPAL was founded by industry veterans with deep experience in recruiting, staffing technology, and enterprise software.",
     leadership_team: {},
-    team_size_details: "",
+    team_size_details: "Cross-functional teams in product, engineering, sales, support, and customer success; global operations across multiple regions.",
     additional_context: "",
     custom_fields: {}
   });
 
   // Document management
   const [documents, setDocuments] = useState<BrainDocument[]>([]);
+  const [documentGroups, setDocumentGroups] = useState<DocumentGroup[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const [documentName, setDocumentName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  
+  // Upload form fields
+  const [uploadFormData, setUploadFormData] = useState({
+    description: "",
+    tags: "",
+    category: "",
+    documentGroupId: ""
+  });
+  
+  // Group management
+  const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupDescription, setNewGroupDescription] = useState("");
+  const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>("all");
+  const [editingGroup, setEditingGroup] = useState<DocumentGroup | null>(null);
+  const [isEditGroupDialogOpen, setIsEditGroupDialogOpen] = useState(false);
+  const [documentsTabView, setDocumentsTabView] = useState("files");
+  
+  // Move document
+  const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
+  const [documentToMove, setDocumentToMove] = useState<BrainDocument | null>(null);
+  const [moveToGroupId, setMoveToGroupId] = useState("");
+  const [groupSearchQuery, setGroupSearchQuery] = useState("");
 
   // Temporary arrays for editing
   const [coreValueInput, setCoreValueInput] = useState("");
@@ -94,6 +122,7 @@ export default function BrainPage({ onBack }: BrainPageProps) {
     if (user) {
       loadBrainData();
       loadDocuments();
+      loadDocumentGroups();
     }
   }, [user]);
 
@@ -139,6 +168,21 @@ export default function BrainPage({ onBack }: BrainPageProps) {
       setDocuments(data || []);
     } catch (error) {
       console.error('Error loading documents:', error);
+    }
+  };
+
+  const loadDocumentGroups = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('document_groups')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('group_name');
+
+      if (error) throw error;
+      setDocumentGroups(data || []);
+    } catch (error) {
+      console.error('Error loading document groups:', error);
     }
   };
 
@@ -190,17 +234,40 @@ export default function BrainPage({ onBack }: BrainPageProps) {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      setDocumentName(file.name.replace(/\.[^/.]+$/, "")); // Remove extension
       setUploadDialogOpen(true);
     }
     event.target.value = ''; // Reset input
   };
 
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setUploadDialogOpen(true);
+    }
+  };
+
   const handleUploadConfirm = async () => {
-    if (!selectedFile || !documentName.trim()) {
+    if (!selectedFile) {
       toast({
         title: "Error",
-        description: "Please provide a document name",
+        description: "Please select a file",
         variant: "destructive"
       });
       return;
@@ -208,7 +275,6 @@ export default function BrainPage({ onBack }: BrainPageProps) {
 
     setIsUploading(true);
     try {
-      const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${user?.id}/${Date.now()}-${selectedFile.name}`;
       const filePath = `${fileName}`;
 
@@ -232,17 +298,26 @@ export default function BrainPage({ onBack }: BrainPageProps) {
       else if (selectedFile.type.includes('pdf')) fileType = 'pdf';
       else if (selectedFile.type.includes('document') || selectedFile.type.includes('word')) fileType = 'document';
 
-      // Save to database with custom name
+      // Parse tags from comma-separated string
+      const tagsArray = uploadFormData.tags
+        ? uploadFormData.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
+        : [];
+
+      // Save to database with new fields
       const { error: dbError } = await supabase
         .from('brain_documents')
         .insert([{
           user_id: user?.id,
-          file_name: documentName.trim(),
+          file_name: selectedFile.name,
           file_type: fileType,
           file_size: selectedFile.size,
           storage_path: filePath,
           storage_url: urlData.publicUrl,
           mime_type: selectedFile.type,
+          description: uploadFormData.description || null,
+          tags: tagsArray.length > 0 ? tagsArray : null,
+          category: uploadFormData.category || null,
+          document_group_id: uploadFormData.documentGroupId || null,
           status: 'uploaded'
         }]);
 
@@ -253,8 +328,13 @@ export default function BrainPage({ onBack }: BrainPageProps) {
         description: "Document uploaded successfully"
       });
       setUploadDialogOpen(false);
-      setDocumentName("");
       setSelectedFile(null);
+      setUploadFormData({
+        description: "",
+        tags: "",
+        category: "",
+        documentGroupId: ""
+      });
       loadDocuments();
     } catch (error) {
       console.error('Error uploading:', error);
@@ -265,6 +345,142 @@ export default function BrainPage({ onBack }: BrainPageProps) {
       });
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleCreateGroup = async () => {
+    if (!newGroupName.trim()) {
+      toast({
+        title: "Error",
+        description: "Please provide a group name",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('document_groups')
+        .insert([{
+          user_id: user?.id,
+          group_name: newGroupName.trim(),
+          description: newGroupDescription.trim() || null
+        }]);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Group created successfully"
+      });
+      setIsGroupDialogOpen(false);
+      setNewGroupName("");
+      setNewGroupDescription("");
+      loadDocumentGroups();
+    } catch (error) {
+      console.error('Error creating group:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create group",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: string) => {
+    if (!confirm('Delete this group? Documents in this group will not be deleted.')) return;
+
+    try {
+      const { error } = await supabase
+        .from('document_groups')
+        .delete()
+        .eq('id', groupId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Group deleted successfully"
+      });
+      setSelectedGroupFilter("all");
+      loadDocumentGroups();
+      loadDocuments();
+    } catch (error) {
+      console.error('Error deleting group:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete group",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleEditGroup = async () => {
+    if (!editingGroup || !editingGroup.group_name.trim()) {
+      toast({
+        title: "Error",
+        description: "Please provide a group name",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('document_groups')
+        .update({
+          group_name: editingGroup.group_name.trim(),
+          description: editingGroup.description?.trim() || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingGroup.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Group updated successfully"
+      });
+      setIsEditGroupDialogOpen(false);
+      setEditingGroup(null);
+      loadDocumentGroups();
+    } catch (error) {
+      console.error('Error updating group:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update group",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleMoveDocument = async () => {
+    if (!documentToMove) return;
+
+    try {
+      const { error } = await supabase
+        .from('brain_documents')
+        .update({ document_group_id: moveToGroupId || null })
+        .eq('id', documentToMove.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Document moved successfully"
+      });
+      setIsMoveDialogOpen(false);
+      setDocumentToMove(null);
+      setMoveToGroupId("");
+      setGroupSearchQuery("");
+      loadDocuments();
+    } catch (error) {
+      console.error('Error moving document:', error);
+      toast({
+        title: "Error",
+        description: "Failed to move document",
+        variant: "destructive"
+      });
     }
   };
 
@@ -796,14 +1012,71 @@ export default function BrainPage({ onBack }: BrainPageProps) {
                   <div className="flex items-center gap-3">
                     <Upload className="h-5 w-5 text-green-600" />
                     <div>
-                      <CardTitle>Documents</CardTitle>
-                      <CardDescription>Upload files for AI knowledge base</CardDescription>
+                      <CardTitle>Documents & Groups</CardTitle>
+                      <CardDescription>Manage files and organize with groups</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
+                  {/* Nested Tabs for Files and Groups */}
+                  <Tabs value={documentsTabView} onValueChange={setDocumentsTabView}>
+                    <TabsList className="grid w-full grid-cols-2 mb-4">
+                      <TabsTrigger value="files">
+                        <FileText className="h-4 w-4 mr-2" />
+                        Files
+                      </TabsTrigger>
+                      <TabsTrigger value="groups">
+                        <Users className="h-4 w-4 mr-2" />
+                        Groups
+                      </TabsTrigger>
+                    </TabsList>
+
+                    {/* Files Tab */}
+                    <TabsContent value="files" className="space-y-4">
+                    {/* Group Management */}
+                    <div className="flex items-center gap-2">
+                      <Select value={selectedGroupFilter} onValueChange={setSelectedGroupFilter}>
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="Filter by group" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Documents</SelectItem>
+                          {documentGroups.map((group) => (
+                            <SelectItem key={group.id} value={group.id}>
+                              {group.group_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        onClick={() => setIsGroupDialogOpen(true)}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        New Group
+                      </Button>
+                      {selectedGroupFilter !== "all" && (
+                        <Button
+                          onClick={() => handleDeleteGroup(selectedGroupFilter)}
+                          variant="ghost"
+                          size="sm"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                    
+                    <div 
+                      className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                        isDragging 
+                          ? 'border-primary bg-primary/5' 
+                          : 'border-border'
+                      }`}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                    >
                       <Input
                         id="file-upload"
                         type="file"
@@ -817,10 +1090,14 @@ export default function BrainPage({ onBack }: BrainPageProps) {
                           {isUploading ? (
                             <Loader2 className="h-12 w-12 text-muted-foreground animate-spin" />
                           ) : (
-                            <Upload className="h-12 w-12 text-muted-foreground" />
+                            <Upload className={`h-12 w-12 ${
+                              isDragging ? 'text-primary' : 'text-muted-foreground'
+                            }`} />
                           )}
-                          <p className="text-lg font-medium">
-                            {isUploading ? "Uploading..." : "Click to upload files"}
+                          <p className={`text-lg font-medium ${
+                            isDragging ? 'text-primary' : ''
+                          }`}>
+                            {isUploading ? "Uploading..." : isDragging ? "Drop file here" : "Click or drag to upload files"}
                           </p>
                           <p className="text-sm text-muted-foreground">
                             PDF, Images, Audio, Video (Max 50MB per file)
@@ -833,45 +1110,168 @@ export default function BrainPage({ onBack }: BrainPageProps) {
                       <div className="space-y-2">
                         <Separator />
                         <div className="grid grid-cols-1 gap-2">
-                          {documents.map((doc) => (
+                          {documents
+                            .filter(doc => selectedGroupFilter === "all" || doc.document_group_id === selectedGroupFilter)
+                            .map((doc) => (
                             <div
                               key={doc.id}
-                              className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-accent/50 transition-colors"
+                              className="flex items-start justify-between p-3 border border-border rounded-lg hover:bg-accent/50 transition-colors"
                             >
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-start gap-3 flex-1">
                                 {getFileIcon(doc.file_type)}
-                                <div>
+                                <div className="flex-1">
                                   <p className="font-medium text-sm">{doc.file_name}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {(doc.file_size! / 1024 / 1024).toFixed(2)} MB • {doc.file_type}
-                                  </p>
+                                  {doc.description && (
+                                    <p className="text-xs text-muted-foreground mt-1">{doc.description}</p>
+                                  )}
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <p className="text-xs text-muted-foreground">
+                                      {(doc.file_size! / 1024 / 1024).toFixed(2)} MB • {doc.file_type}
+                                    </p>
+                                    {doc.category && (
+                                      <Badge variant="outline" className="text-xs">{doc.category}</Badge>
+                                    )}
+                                    {doc.tags && doc.tags.map((tag, idx) => (
+                                      <Badge key={idx} variant="secondary" className="text-xs">{tag}</Badge>
+                                    ))}
+                                  </div>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 <Badge variant={doc.status === 'uploaded' ? 'secondary' : 'outline'}>
                                   {doc.status}
                                 </Badge>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => window.open(doc.storage_url, '_blank')}
-                                >
-                                  View
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteDocument(doc)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="sm">
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => window.open(doc.storage_url, '_blank')}>
+                                      <FileText className="h-4 w-4 mr-2" />
+                                      View
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => {
+                                      setDocumentToMove(doc);
+                                      setMoveToGroupId(doc.document_group_id || "");
+                                      setIsMoveDialogOpen(true);
+                                    }}>
+                                      <Move className="h-4 w-4 mr-2" />
+                                      Move
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={() => handleDeleteDocument(doc)}
+                                      className="text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
-                  </div>
+                    </TabsContent>
+
+                    {/* Groups Tab */}
+                    <TabsContent value="groups" className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <p className="text-sm text-muted-foreground">
+                          Manage document groups to organize your files
+                        </p>
+                        <Button
+                          onClick={() => setIsGroupDialogOpen(true)}
+                          size="sm"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create Group
+                        </Button>
+                      </div>
+
+                      {documentGroups.length === 0 ? (
+                        <div className="border-2 border-dashed rounded-lg p-8 text-center">
+                          <Users className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                          <p className="text-lg font-medium mb-2">No groups yet</p>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            Create groups to organize your documents
+                          </p>
+                          <Button
+                            onClick={() => setIsGroupDialogOpen(true)}
+                            variant="outline"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create First Group
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {documentGroups.map((group) => {
+                            const groupDocCount = documents.filter(d => d.document_group_id === group.id).length;
+                            return (
+                              <Card key={group.id} className="hover:shadow-md transition-shadow">
+                                <CardHeader className="pb-3">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <CardTitle className="text-base">{group.group_name}</CardTitle>
+                                      {group.description && (
+                                        <CardDescription className="text-xs mt-1">
+                                          {group.description}
+                                        </CardDescription>
+                                      )}
+                                    </div>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="sm">
+                                          <MoreHorizontal className="h-4 w-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={() => {
+                                          setEditingGroup(group);
+                                          setIsEditGroupDialogOpen(true);
+                                        }}>
+                                          <Edit className="h-4 w-4 mr-2" />
+                                          Edit
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem 
+                                          onClick={() => handleDeleteGroup(group.id)}
+                                          className="text-destructive"
+                                        >
+                                          <Trash2 className="h-4 w-4 mr-2" />
+                                          Delete
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-muted-foreground">
+                                      {groupDocCount} {groupDocCount === 1 ? 'document' : 'documents'}
+                                    </span>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedGroupFilter(group.id);
+                                        setDocumentsTabView("files");
+                                      }}
+                                    >
+                                      View Files
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </TabsContent>
+                  </Tabs>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -879,46 +1279,96 @@ export default function BrainPage({ onBack }: BrainPageProps) {
 
           {/* Upload Dialog */}
           <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-            <DialogContent>
+            <DialogContent className="max-w-lg">
               <DialogHeader>
                 <DialogTitle>Upload Document</DialogTitle>
                 <DialogDescription>
-                  Provide a name for your document
+                  Add document details and metadata
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
+                {selectedFile && (
+                  <div className="bg-muted p-3 rounded-lg space-y-1">
+                    <p className="text-sm font-medium">File: {selectedFile.name}</p>
+                    <p className="text-xs text-muted-foreground">Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+                )}
                 <div className="space-y-2">
-                  <Label htmlFor="doc-name">Document Name</Label>
+                  <Label htmlFor="doc-desc">Description (Optional)</Label>
+                  <Textarea
+                    id="doc-desc"
+                    value={uploadFormData.description}
+                    onChange={(e) => setUploadFormData({...uploadFormData, description: e.target.value})}
+                    placeholder="Describe this document..."
+                    disabled={isUploading}
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="doc-tags">Tags (Optional)</Label>
                   <Input
-                    id="doc-name"
-                    value={documentName}
-                    onChange={(e) => setDocumentName(e.target.value)}
-                    placeholder="Enter document name"
+                    id="doc-tags"
+                    value={uploadFormData.tags}
+                    onChange={(e) => setUploadFormData({...uploadFormData, tags: e.target.value})}
+                    placeholder="sales, training, onboarding (comma-separated)"
                     disabled={isUploading}
                   />
                 </div>
-                {selectedFile && (
-                  <div className="bg-muted p-3 rounded-lg space-y-1">
-                    <p className="text-sm font-medium">File Details:</p>
-                    <p className="text-xs text-muted-foreground">Original: {selectedFile.name}</p>
-                    <p className="text-xs text-muted-foreground">Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                    <p className="text-xs text-muted-foreground">Type: {selectedFile.type || 'Unknown'}</p>
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <Label htmlFor="doc-category">Category (Optional)</Label>
+                  <Select 
+                    value={uploadFormData.category} 
+                    onValueChange={(value) => setUploadFormData({...uploadFormData, category: value})}
+                    disabled={isUploading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="training">Training</SelectItem>
+                      <SelectItem value="sales">Sales</SelectItem>
+                      <SelectItem value="marketing">Marketing</SelectItem>
+                      <SelectItem value="product">Product</SelectItem>
+                      <SelectItem value="hr">HR</SelectItem>
+                      <SelectItem value="legal">Legal</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="doc-group">Group (Optional)</Label>
+                  <Select 
+                    value={uploadFormData.documentGroupId} 
+                    onValueChange={(value) => setUploadFormData({...uploadFormData, documentGroupId: value})}
+                    disabled={isUploading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Group</SelectItem>
+                      {documentGroups.map((group) => (
+                        <SelectItem key={group.id} value={group.id}>
+                          {group.group_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <DialogFooter>
                 <Button
                   variant="outline"
                   onClick={() => {
                     setUploadDialogOpen(false);
-                    setDocumentName("");
                     setSelectedFile(null);
+                    setUploadFormData({ description: "", tags: "", category: "", documentGroupId: "" });
                   }}
                   disabled={isUploading}
                 >
                   Cancel
                 </Button>
-                <Button onClick={handleUploadConfirm} disabled={isUploading || !documentName.trim()}>
+                <Button onClick={handleUploadConfirm} disabled={isUploading}>
                   {isUploading ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -930,6 +1380,178 @@ export default function BrainPage({ onBack }: BrainPageProps) {
                       Upload
                     </>
                   )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Create Group Dialog */}
+          <Dialog open={isGroupDialogOpen} onOpenChange={setIsGroupDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Document Group</DialogTitle>
+                <DialogDescription>
+                  Organize your documents into groups
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="group-name">Group Name</Label>
+                  <Input
+                    id="group-name"
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    placeholder="Enter group name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="group-desc">Description (Optional)</Label>
+                  <Textarea
+                    id="group-desc"
+                    value={newGroupDescription}
+                    onChange={(e) => setNewGroupDescription(e.target.value)}
+                    placeholder="Describe this group..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsGroupDialogOpen(false);
+                    setNewGroupName("");
+                    setNewGroupDescription("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleCreateGroup} disabled={!newGroupName.trim()}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Group
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit Group Dialog */}
+          <Dialog open={isEditGroupDialogOpen} onOpenChange={setIsEditGroupDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Document Group</DialogTitle>
+                <DialogDescription>
+                  Update group name and description
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-group-name">Group Name</Label>
+                  <Input
+                    id="edit-group-name"
+                    value={editingGroup?.group_name || ""}
+                    onChange={(e) => setEditingGroup(editingGroup ? {...editingGroup, group_name: e.target.value} : null)}
+                    placeholder="Enter group name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-group-desc">Description (Optional)</Label>
+                  <Textarea
+                    id="edit-group-desc"
+                    value={editingGroup?.description || ""}
+                    onChange={(e) => setEditingGroup(editingGroup ? {...editingGroup, description: e.target.value} : null)}
+                    placeholder="Describe this group..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsEditGroupDialogOpen(false);
+                    setEditingGroup(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleEditGroup} disabled={!editingGroup?.group_name.trim()}>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Move Document Dialog */}
+          <Dialog open={isMoveDialogOpen} onOpenChange={setIsMoveDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Move Document</DialogTitle>
+                <DialogDescription>
+                  Move "{documentToMove?.file_name}" to a different group
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="group-search">Search Groups</Label>
+                  <Input
+                    id="group-search"
+                    value={groupSearchQuery}
+                    onChange={(e) => setGroupSearchQuery(e.target.value)}
+                    placeholder="Search groups..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Select Group</Label>
+                  <ScrollArea className="h-[200px] border rounded-md p-2">
+                    <div className="space-y-1">
+                      <div
+                        className={`p-2 rounded cursor-pointer hover:bg-accent transition-colors ${
+                          moveToGroupId === "" ? "bg-accent" : ""
+                        }`}
+                        onClick={() => setMoveToGroupId("")}
+                      >
+                        <p className="text-sm font-medium">No Group</p>
+                        <p className="text-xs text-muted-foreground">Remove from all groups</p>
+                      </div>
+                      {documentGroups
+                        .filter(group => 
+                          group.group_name.toLowerCase().includes(groupSearchQuery.toLowerCase()) ||
+                          (group.description && group.description.toLowerCase().includes(groupSearchQuery.toLowerCase()))
+                        )
+                        .map((group) => (
+                          <div
+                            key={group.id}
+                            className={`p-2 rounded cursor-pointer hover:bg-accent transition-colors ${
+                              moveToGroupId === group.id ? "bg-accent" : ""
+                            }`}
+                            onClick={() => setMoveToGroupId(group.id)}
+                          >
+                            <p className="text-sm font-medium">{group.group_name}</p>
+                            {group.description && (
+                              <p className="text-xs text-muted-foreground">{group.description}</p>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsMoveDialogOpen(false);
+                    setDocumentToMove(null);
+                    setMoveToGroupId("");
+                    setGroupSearchQuery("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleMoveDocument}>
+                  <Move className="h-4 w-4 mr-2" />
+                  Move Document
                 </Button>
               </DialogFooter>
             </DialogContent>
