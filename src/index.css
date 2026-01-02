@@ -1,0 +1,171 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Ceipal Theme - AI Powered. People Driven. */
+    --background: 0 0% 98%;
+    --foreground: 210 20% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 20% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 20% 15%;
+
+    /* Primary Blue - trust, reliability, enterprise tech */
+    --primary: 210 90% 48%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 210 90% 42%;
+    
+    /* Vibrant Orange - energy, warmth, human touch */
+    --accent-blue: 25 95% 53%;
+    --accent-blue-hover: 25 95% 47%;
+    --accent-blue-light: 25 95% 96%;
+
+    /* Warm greys - elegant neutrals */
+    --secondary: 0 0% 92%;
+    --secondary-foreground: 0 0% 20%;
+
+    --muted: 0 0% 92%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 40 35% 55%;
+    --accent-foreground: 0 0% 10%;
+
+    /* Subtle success and warning - maintain professionalism */
+    --success: 142 50% 40%;
+    --success-foreground: 0 0% 98%;
+    --success-light: 142 40% 95%;
+    
+    --warning: 38 70% 50%;
+    --warning-foreground: 0 0% 10%;
+    --warning-light: 38 70% 95%;
+
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --destructive-light: 0 65% 95%;
+
+    --border: 0 0% 88%;
+    --input: 0 0% 88%;
+    --ring: 40 35% 55%;
+
+    --radius: 0.25rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 20%;
+    --sidebar-primary: 0 0% 10%;
+    --sidebar-primary-foreground: 0 0% 96%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 0 0% 10%;
+    --sidebar-border: 0 0% 90%;
+    --sidebar-ring: 40 35% 55%;
+  }
+
+  .dark {
+    /* Ceipal Dark Mode - modern tech aesthetic */
+    --background: 210 20% 8%;
+    --foreground: 0 0% 96%;
+
+    --card: 210 20% 10%;
+    --card-foreground: 0 0% 96%;
+
+    --popover: 210 20% 10%;
+    --popover-foreground: 0 0% 96%;
+
+    --primary: 210 90% 55%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 210 90% 48%;
+
+    --accent-blue: 25 95% 58%;
+    --accent-blue-hover: 25 95% 52%;
+    --accent-blue-light: 25 95% 15%;
+
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 96%;
+
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 60%;
+
+    --accent: 40 40% 60%;
+    --accent-foreground: 0 0% 10%;
+
+    --success: 142 50% 45%;
+    --success-foreground: 0 0% 98%;
+    --success-light: 142 40% 15%;
+    
+    --warning: 38 70% 55%;
+    --warning-foreground: 0 0% 10%;
+    --warning-light: 38 70% 15%;
+
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 98%;
+    --destructive-light: 0 65% 15%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 40 40% 60%;
+
+    --sidebar-background: 0 0% 8%;
+    --sidebar-foreground: 0 0% 80%;
+    --sidebar-primary: 0 0% 96%;
+    --sidebar-primary-foreground: 0 0% 10%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 0 0% 20%;
+    --sidebar-ring: 40 40% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+    line-height: 1.6;
+  }
+
+  /* Ceipal Typography - Clean, modern, tech-focused */
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+    color: hsl(var(--foreground));
+  }
+
+  h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+
+  h2 {
+    font-size: 2rem;
+    font-weight: 600;
+  }
+
+  h3 {
+    font-size: 1.5rem;
+  }
+
+  p {
+    color: hsl(var(--muted-foreground));
+    line-height: 1.8;
+  }
+
+  /* Luxury button styling */
+  button {
+    letter-spacing: 0.05em;
+    font-weight: 500;
+  }
+}
