@@ -165,3 +165,83 @@ export interface BrainDocument {
   created_at: string
   updated_at: string
 }
+
+// ============================================================================
+// PROJECT TYPES
+// ============================================================================
+
+export interface Project {
+  id: string
+  company_id: string
+  created_by: string
+  project_name: string
+  description?: string
+  status: 'active' | 'on_hold' | 'completed' | 'archived'
+  start_date?: string
+  end_date?: string
+  is_deleted: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectMetadata {
+  id: string
+  project_id: string
+  company_id: string
+  domain?: string
+  industry?: string
+  tech_stack?: string[]
+  project_type?: string
+  target_audience?: string
+  key_goals?: string[]
+  requirements?: string
+  milestones?: any // JSONB
+  team_size?: string
+  budget_range?: string
+  priority_level?: 'low' | 'medium' | 'high' | 'critical'
+  custom_fields?: any // JSONB
+  additional_context?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectDocument {
+  id: string
+  project_id: string
+  company_id: string
+  uploaded_by: string
+  file_name: string
+  file_type: string
+  file_size?: number
+  mime_type?: string
+  storage_path: string
+  storage_url?: string
+  title?: string
+  description?: string
+  tags?: string[]
+  category?: string
+  extracted_text?: string
+  status: 'uploaded' | 'processing' | 'processed' | 'failed'
+  is_deleted: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectEmbedding {
+  id: string
+  project_id: string
+  company_id: string
+  content_type: 'project_metadata' | 'document' | 'document_chunk'
+  content_id?: string
+  content: string
+  metadata?: any // JSONB
+  embedding?: number[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectWithMetadata extends Project {
+  metadata?: ProjectMetadata
+  document_count?: number
+  embedding_count?: number
+}

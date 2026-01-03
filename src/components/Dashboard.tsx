@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Upload, Play, Download, MoreHorizontal, TrendingUp, TrendingDown, Users, Phone, Star, AlertTriangle, Trash2, BarChart3, Loader2, User, UserPlus, FolderOpen, FileSpreadsheet, RefreshCw, Smile, Meh, Frown, Flame, ThumbsUp, ThumbsDown, Zap, HelpCircle, AlertCircle, Clock, Brain } from "lucide-react";
+import { Upload, Play, Download, MoreHorizontal, TrendingUp, TrendingDown, Users, Phone, Star, AlertTriangle, Trash2, BarChart3, Loader2, User, UserPlus, FolderOpen, FileSpreadsheet, RefreshCw, Smile, Meh, Frown, Flame, ThumbsUp, ThumbsDown, Zap, HelpCircle, AlertCircle, Clock, Brain, FolderKanban } from "lucide-react";
 import { useDashboardStats, useRecordings, useAnalyses, useDeleteRecording, useLeads } from "@/hooks/useSupabaseData";
 import AddRecordingModal from "./AddRecordingModal";
 import AllLeadsPage from "./AllLeadsPage";
@@ -19,9 +19,10 @@ import { Analysis } from "@/lib/supabase";
 interface DashboardProps {
   onShowProfile?: () => void;
   onShowBrain?: () => void;
+  onShowProjects?: () => void;
 }
 
-export default function Dashboard({ onShowProfile, onShowBrain }: DashboardProps) {
+export default function Dashboard({ onShowProfile, onShowBrain, onShowProjects }: DashboardProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') || 'overview';
   const [selectedTab, setSelectedTab] = useState(initialTab);
@@ -325,6 +326,16 @@ export default function Dashboard({ onShowProfile, onShowBrain }: DashboardProps
               >
                 <UserPlus className="h-4 w-4 mr-3" />
                 Leads
+              </Button>
+              
+              {/* Projects Section */}
+              <Button 
+                variant="ghost"
+                className="w-full justify-start font-medium text-sm transition-all text-muted-foreground hover:text-foreground hover:bg-gray-50"
+                onClick={onShowProjects}
+              >
+                <FolderKanban className="h-4 w-4 mr-3" />
+                Projects
               </Button>
               
               {/* Brain Section */}
