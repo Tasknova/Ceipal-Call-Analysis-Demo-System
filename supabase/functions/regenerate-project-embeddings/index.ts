@@ -141,11 +141,10 @@ Deno.serve(async (req: Request) => {
 
     console.log('Starting project embedding regeneration...');
 
-    // Get all projects
+    // Get all projects (no need to filter is_deleted since projects are hard-deleted)
     const { data: projects, error: projectsError } = await supabase
       .from('projects')
-      .select('*')
-      .eq('is_deleted', false);
+      .select('*');
 
     if (projectsError) throw projectsError;
 

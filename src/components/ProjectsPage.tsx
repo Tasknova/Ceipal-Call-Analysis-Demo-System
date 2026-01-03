@@ -89,7 +89,6 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
         .from('projects')
         .select('*')
         .eq('company_id', user.id)
-        .eq('is_deleted', false)
         .order('created_at', { ascending: false });
 
       console.log('Projects query result:', { data, error });
@@ -151,7 +150,13 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
 
       setCreateDialogOpen(false);
       resetForm();
-      loadProjects();
+
+      // Navigate to the project brain page
+      if (data?.project_id && onViewProject) {
+        onViewProject(data.project_id);
+      } else {
+        loadProjects();
+      }
     } catch (error) {
       console.error('Error creating project:', error);
       toast({
@@ -219,7 +224,26 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
     try {
       setIsSaving(true);
 
-      // Soft delete
+      // Get all documents for this project to delete from storage
+      const { data: documents } = await supabase
+        .from('project_documents')
+        .select('storage_path')
+        .eq('project_id', selectedProject.id);
+
+      // Delete files from storage bucket
+      if (documents && documents.length > 0) {
+        const filePaths = documents
+          .map(doc => doc.storage_path)
+          .filter(path => path);
+        
+        if (filePaths.length > 0) {
+          await supabase.storage
+            .from('project-documents')
+            .remove(filePaths);
+        }
+      }
+
+      // Hard delete project and all related data (embeddings, documents, metadata)
       const { error } = await supabase
         .rpc('soft_delete_project', {
           p_project_id: selectedProject.id
@@ -229,7 +253,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
 
       toast({
         title: "Success",
-        description: "Project deleted successfully"
+        description: "Project and all related data deleted permanently"
       });
 
       setDeleteDialogOpen(false);
@@ -310,49 +334,96 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
   );
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
-        <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+      {/* Header Navigation */}
+      <header className="border-b border-border bg-card px-8 py-5 sticky top-0 z-50 backdrop-blur-lg bg-card/95">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-6">
+            <img 
+              src="/ceipal_logo.png" 
+              alt="Ceipal Logo" 
+              className="h-12 cursor-pointer hover:opacity-90 transition-opacity duration-300" 
+              onClick={() => window.location.href = '/'}
+            />
+            <div className="border-l border-border pl-6">
+              <h1 className="text-xl font-semibold text-primary tracking-wide">Ceipal Voice Intelligence</h1>
+              <p className="text-xs text-muted-foreground">AI Powered. People Driven.</p>
+            </div>
+          </div>
           {onBack && (
-            <Button variant="ghost" size="icon" onClick={onBack}>
-              <ArrowLeft className="h-5 w-5" />
+            <Button variant="ghost" onClick={onBack} className="flex items-center gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Dashboard
             </Button>
           )}
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <FolderKanban className="h-8 w-8" />
-              Projects
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Manage your projects with dedicated Project Brains
-            </p>
-          </div>
         </div>
-        <Button
-          onClick={() => {
-            resetForm();
-            setCreateDialogOpen(true);
-          }}
-          className="mt-4 md:mt-0"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          New Project
-        </Button>
-      </div>
+      </header>
 
-      {/* Search */}
-      <div className="mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search projects..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+      <div className="container mx-auto p-6 max-w-7xl">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+          <div className="flex items-center gap-4">
+            {onBack && (
+              <Button variant="ghost" size="icon" onClick={onBack}>
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            )}
+            <div>
+              <h1 className="text-4xl font-bold flex items-center gap-3 bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                <FolderKanban className="h-10 w-10 text-primary" />
+                Projects
+              </h1>
+              <p className="text-muted-foreground mt-2">
+                Manage your projects with dedicated Project Brains
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => {
+              resetForm();
+              setCreateDialogOpen(true);
+            }}
+            className="mt-4 md:mt-0 shadow-lg hover:shadow-xl transition-shadow"
+            size="lg"
+          >
+            <Plus className="h-5 w-5 mr-2" />
+            New Project
+          </Button>
         </div>
-      </div>
+
+        {/* Search and Stats */}
+        <div className="mb-8">
+          <Card className="bg-card/50 backdrop-blur-sm border-muted">
+            <CardContent className="pt-6">
+              <div className="flex flex-col md:flex-row md:items-center gap-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search projects by name or description..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-11 h-11 text-base"
+                  />
+                </div>
+                <div className="flex items-center gap-6 text-sm">
+                  <div className="text-center">
+                    <div className="font-bold text-2xl text-primary">{projects.length}</div>
+                    <div className="text-muted-foreground">Total</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-bold text-2xl text-green-600">{projects.filter(p => p.status === 'active').length}</div>
+                    <div className="text-muted-foreground">Active</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-bold text-2xl text-blue-600">{projects.filter(p => p.status === 'completed').length}</div>
+                    <div className="text-muted-foreground">Completed</div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
       {/* Projects Grid */}
       {isLoading ? (
@@ -378,18 +449,22 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProjects.map((project) => (
-            <Card key={project.id} className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => onViewProject?.(project.id)}>
-              <CardHeader>
+            <Card 
+              key={project.id} 
+              className="group hover:shadow-xl hover:scale-[1.02] transition-all duration-200 cursor-pointer bg-card/60 backdrop-blur-sm border-2 hover:border-primary/50" 
+              onClick={() => onViewProject?.(project.id)}
+            >
+              <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <CardTitle className="text-lg mb-2">{project.project_name}</CardTitle>
-                    <Badge className={getStatusColor(project.status)}>
+                    <CardTitle className="text-xl mb-3 group-hover:text-primary transition-colors">{project.project_name}</CardTitle>
+                    <Badge className={`${getStatusColor(project.status)} text-white px-3 py-1`}>
                       {getStatusLabel(project.status)}
                     </Badge>
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="icon">
+                      <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -414,22 +489,28 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
                 </div>
               </CardHeader>
               <CardContent>
-                <CardDescription className="line-clamp-3 mb-4">
+                <CardDescription className="line-clamp-3 mb-4 text-base">
                   {project.description || "No description provided"}
                 </CardDescription>
-                {project.start_date && (
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    <Calendar className="h-4 w-4 mr-2" />
-                    <span>
-                      Started: {new Date(project.start_date).toLocaleDateString()}
-                    </span>
+                <div className="space-y-2 pt-2 border-t">
+                  {project.start_date && (
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      <span>
+                        Started: {new Date(project.start_date).toLocaleDateString()}
+                      </span>
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground">
+                    Created {new Date(project.created_at).toLocaleDateString()}
                   </div>
-                )}
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+      </div>
 
       {/* Create Project Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
@@ -599,7 +680,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
           <DialogHeader>
             <DialogTitle>Delete Project</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{selectedProject?.project_name}"? This action will soft delete the project and its documents but can be recovered.
+              Are you sure you want to permanently delete "{selectedProject?.project_name}"? This will remove the project, all documents, embeddings, and metadata. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
 
@@ -614,6 +695,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
     </div>
   );
 }

@@ -15,12 +15,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import type { Project, ProjectMetadata, ProjectDocument } from "@/lib/supabase";
 import {
-  storeProjectEmbedding,
-  prepareProjectMetadataForEmbedding,
-  deleteProjectEmbeddingsByType,
-  chunkProjectText
-} from "@/lib/projectEmbeddings";
-import {
   Brain,
   Save,
   Edit,
@@ -208,26 +202,7 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
 
       if (error) throw error;
 
-      // Generate and store embeddings
-      try {
-        const content = prepareProjectMetadataForEmbedding(metadata, project.project_name);
-
-        // Delete old embeddings
-        await deleteProjectEmbeddingsByType(supabase, projectId, 'project_metadata');
-
-        // Store new embedding
-        await storeProjectEmbedding(supabase, {
-          project_id: projectId,
-          company_id: user.id,
-          content_type: 'project_metadata',
-          content_id: projectId,
-          content: content,
-          metadata: { source: 'project_metadata_form' }
-        });
-      } catch (embeddingError) {
-        console.warn('Failed to generate embeddings:', embeddingError);
-        // Don't fail the save if embeddings fail
-      }
+      // Embeddings will be generated automatically by database trigger
 
       toast({
         title: "Success",
@@ -303,38 +278,7 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
 
       if (insertError) throw insertError;
 
-      // Generate and store embedding for document metadata
-      if (insertedDoc?.id) {
-        try {
-          const embeddingContent = [
-            `Project: ${project.project_name}`,
-            `File: ${selectedFile.name}`,
-            uploadFormData.description ? `Description: ${uploadFormData.description}` : '',
-            uploadFormData.category ? `Category: ${uploadFormData.category}` : '',
-            tags.length > 0 ? `Tags: ${tags.join(', ')}` : '',
-            `Type: ${fileExt || 'unknown'}`
-          ].filter(Boolean).join('\n');
-
-          await storeProjectEmbedding(supabase, {
-            project_id: projectId,
-            company_id: user.id,
-            content_type: 'document',
-            content_id: insertedDoc.id,
-            content: embeddingContent,
-            metadata: {
-              file_name: selectedFile.name,
-              file_type: fileExt || 'unknown',
-              category: uploadFormData.category,
-              tags: tags,
-              storage_url: publicUrl,
-              project_name: project.project_name
-            }
-          });
-        } catch (embError) {
-          console.error('Error generating document embedding:', embError);
-          // Don't fail the upload if embedding fails
-        }
-      }
+      // Embeddings will be generated automatically by database trigger
 
       toast({
         title: "Success",
@@ -389,44 +333,7 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
 
       if (error) throw error;
 
-      // Regenerate embedding with updated metadata
-      try {
-        const embeddingContent = [
-          `Project: ${project.project_name}`,
-          `File: ${documentToEdit.file_name}`,
-          editFormData.description ? `Description: ${editFormData.description}` : '',
-          editFormData.category ? `Category: ${editFormData.category}` : '',
-          tags.length > 0 ? `Tags: ${tags.join(', ')}` : '',
-          `Type: ${documentToEdit.file_type}`
-        ].filter(Boolean).join('\n');
-
-        // Delete old embedding
-        await supabase
-          .from('project_embeddings')
-          .delete()
-          .eq('project_id', projectId)
-          .eq('content_type', 'document')
-          .eq('content_id', documentToEdit.id);
-
-        // Store new embedding
-        await storeProjectEmbedding(supabase, {
-          project_id: projectId,
-          company_id: user.id,
-          content_type: 'document',
-          content_id: documentToEdit.id,
-          content: embeddingContent,
-          metadata: {
-            file_name: documentToEdit.file_name,
-            file_type: documentToEdit.file_type,
-            category: editFormData.category,
-            tags: tags,
-            storage_url: documentToEdit.storage_url,
-            project_name: project.project_name
-          }
-        });
-      } catch (embError) {
-        console.warn('Failed to regenerate document embedding:', embError);
-      }
+      // Embeddings will be regenerated automatically by database trigger
 
       toast({
         title: "Success",
@@ -477,17 +384,7 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
 
       if (error) throw error;
 
-      // Delete associated embeddings
-      try {
-        await supabase
-          .from('project_embeddings')
-          .delete()
-          .eq('project_id', projectId)
-          .eq('content_type', 'document')
-          .eq('content_id', documentToDelete);
-      } catch (embError) {
-        console.warn('Failed to delete document embeddings:', embError);
-      }
+      // Embeddings will be deleted automatically by database trigger
 
       toast({
         title: "Success",
@@ -566,7 +463,32 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+      {/* Header Navigation */}
+      <header className="border-b border-border bg-card px-8 py-5 sticky top-0 z-50 backdrop-blur-lg bg-card/95">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-6">
+            <img 
+              src="/ceipal_logo.png" 
+              alt="Ceipal Logo" 
+              className="h-12 cursor-pointer hover:opacity-90 transition-opacity duration-300" 
+              onClick={() => window.location.href = '/'}
+            />
+            <div className="border-l border-border pl-6">
+              <h1 className="text-xl font-semibold text-primary tracking-wide">Ceipal Voice Intelligence</h1>
+              <p className="text-xs text-muted-foreground">AI Powered. People Driven.</p>
+            </div>
+          </div>
+          {onBack && (
+            <Button variant="ghost" onClick={onBack} className="flex items-center gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Projects
+            </Button>
+          )}
+        </div>
+      </header>
+
+      <div className="container mx-auto p-6 max-w-7xl">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
@@ -1305,6 +1227,7 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

@@ -35,7 +35,8 @@ import {
   ChevronDown,
   ChevronUp,
   MoreHorizontal,
-  Move
+  Move,
+  ArrowLeft
 } from "lucide-react";
 
 interface BrainPageProps {
@@ -117,9 +118,6 @@ export default function BrainPage({ onBack }: BrainPageProps) {
   const [documentToMove, setDocumentToMove] = useState<BrainDocument | null>(null);
   const [moveToGroupId, setMoveToGroupId] = useState("");
   const [groupSearchQuery, setGroupSearchQuery] = useState("");
-  
-  // Regenerate embeddings
-  const [isRegeneratingEmbeddings, setIsRegeneratingEmbeddings] = useState(false);
 
   // Temporary arrays for editing
   const [coreValueInput, setCoreValueInput] = useState("");
@@ -661,47 +659,6 @@ export default function BrainPage({ onBack }: BrainPageProps) {
     }
   };
 
-  const handleRegenerateEmbeddings = async () => {
-    if (!confirm('Regenerate all embeddings? This will recreate embeddings for all company data and documents.')) return;
-
-    setIsRegeneratingEmbeddings(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/regenerate-embeddings`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to regenerate embeddings');
-      }
-
-      const result = await response.json();
-      
-      toast({
-        title: "Success",
-        description: `Regenerated embeddings for ${result.stats?.total_processed || 0} items`
-      });
-    } catch (error) {
-      console.error('Error regenerating embeddings:', error);
-      toast({
-        title: "Error",
-        description: "Failed to regenerate embeddings",
-        variant: "destructive"
-      });
-    } finally {
-      setIsRegeneratingEmbeddings(false);
-    }
-  };
-
   const getFileIcon = (fileType: string) => {
     switch (fileType) {
       case 'image': return <ImageIcon className="h-5 w-5" />;
@@ -744,8 +701,32 @@ export default function BrainPage({ onBack }: BrainPageProps) {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Header Navigation */}
+      <header className="border-b border-border bg-card px-8 py-5 sticky top-0 z-50 backdrop-blur-lg bg-card/95">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-6">
+            <img 
+              src="/ceipal_logo.png" 
+              alt="Ceipal Logo" 
+              className="h-12 cursor-pointer hover:opacity-90 transition-opacity duration-300" 
+              onClick={() => window.location.href = '/'}
+            />
+            <div className="border-l border-border pl-6">
+              <h1 className="text-xl font-semibold text-primary tracking-wide">Ceipal Voice Intelligence</h1>
+              <p className="text-xs text-muted-foreground">AI Powered. People Driven.</p>
+            </div>
+          </div>
+          {onBack && (
+            <Button variant="ghost" onClick={onBack} className="flex items-center gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Dashboard
+            </Button>
+          )}
+        </div>
+      </header>
+
       {/* Header */}
-      <div className="bg-card border-b border-border sticky top-0 z-40 backdrop-blur-lg bg-card/95">
+      <div className="bg-card border-b border-border sticky top-[73px] z-40 backdrop-blur-lg bg-card/95">
         <div className="max-w-7xl mx-auto px-8 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -1269,24 +1250,6 @@ export default function BrainPage({ onBack }: BrainPageProps) {
                       >
                         <Plus className="h-4 w-4 mr-2" />
                         New Group
-                      </Button>
-                      <Button
-                        onClick={handleRegenerateEmbeddings}
-                        variant="outline"
-                        size="sm"
-                        disabled={isRegeneratingEmbeddings}
-                      >
-                        {isRegeneratingEmbeddings ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Regenerating...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            Regenerate Embeddings
-                          </>
-                        )}
                       </Button>
                       {selectedGroupFilter !== "all" && (
                         <Button
