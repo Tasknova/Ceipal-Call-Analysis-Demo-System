@@ -282,7 +282,7 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
       // Save document metadata
       const tags = uploadFormData.tags.split(',').map(t => t.trim()).filter(Boolean);
       
-      const { error: insertError } = await supabase
+      const { data: insertedDoc, error: insertError } = await supabase
         .from('project_documents')
         .insert([{
           project_id: projectId,
@@ -297,9 +297,44 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
           description: uploadFormData.description || null,
           tags: tags.length > 0 ? tags : null,
           category: uploadFormData.category || null
-        }]);
+        }])
+        .select()
+        .single();
 
       if (insertError) throw insertError;
+
+      // Generate and store embedding for document metadata
+      if (insertedDoc?.id) {
+        try {
+          const embeddingContent = [
+            `Project: ${project.project_name}`,
+            `File: ${selectedFile.name}`,
+            uploadFormData.description ? `Description: ${uploadFormData.description}` : '',
+            uploadFormData.category ? `Category: ${uploadFormData.category}` : '',
+            tags.length > 0 ? `Tags: ${tags.join(', ')}` : '',
+            `Type: ${fileExt || 'unknown'}`
+          ].filter(Boolean).join('\n');
+
+          await storeProjectEmbedding(supabase, {
+            project_id: projectId,
+            company_id: user.id,
+            content_type: 'document',
+            content_id: insertedDoc.id,
+            content: embeddingContent,
+            metadata: {
+              file_name: selectedFile.name,
+              file_type: fileExt || 'unknown',
+              category: uploadFormData.category,
+              tags: tags,
+              storage_url: publicUrl,
+              project_name: project.project_name
+            }
+          });
+        } catch (embError) {
+          console.error('Error generating document embedding:', embError);
+          // Don't fail the upload if embedding fails
+        }
+      }
 
       toast({
         title: "Success",
@@ -338,7 +373,7 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
   };
 
   const handleUpdateDocument = async () => {
-    if (!user || !documentToEdit) return;
+    if (!user || !documentToEdit || !project) return;
 
     try {
       const tags = editFormData.tags.split(',').map(t => t.trim()).filter(Boolean);
@@ -353,6 +388,45 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
         .eq('id', documentToEdit.id);
 
       if (error) throw error;
+
+      // Regenerate embedding with updated metadata
+      try {
+        const embeddingContent = [
+          `Project: ${project.project_name}`,
+          `File: ${documentToEdit.file_name}`,
+          editFormData.description ? `Description: ${editFormData.description}` : '',
+          editFormData.category ? `Category: ${editFormData.category}` : '',
+          tags.length > 0 ? `Tags: ${tags.join(', ')}` : '',
+          `Type: ${documentToEdit.file_type}`
+        ].filter(Boolean).join('\n');
+
+        // Delete old embedding
+        await supabase
+          .from('project_embeddings')
+          .delete()
+          .eq('project_id', projectId)
+          .eq('content_type', 'document')
+          .eq('content_id', documentToEdit.id);
+
+        // Store new embedding
+        await storeProjectEmbedding(supabase, {
+          project_id: projectId,
+          company_id: user.id,
+          content_type: 'document',
+          content_id: documentToEdit.id,
+          content: embeddingContent,
+          metadata: {
+            file_name: documentToEdit.file_name,
+            file_type: documentToEdit.file_type,
+            category: editFormData.category,
+            tags: tags,
+            storage_url: documentToEdit.storage_url,
+            project_name: project.project_name
+          }
+        });
+      } catch (embError) {
+        console.warn('Failed to regenerate document embedding:', embError);
+      }
 
       toast({
         title: "Success",
@@ -395,12 +469,25 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
     if (!user || !documentToDelete) return;
 
     try {
+      // Delete document
       const { error } = await supabase
         .from('project_documents')
         .update({ is_deleted: true })
         .eq('id', documentToDelete);
 
       if (error) throw error;
+
+      // Delete associated embeddings
+      try {
+        await supabase
+          .from('project_embeddings')
+          .delete()
+          .eq('project_id', projectId)
+          .eq('content_type', 'document')
+          .eq('content_id', documentToDelete);
+      } catch (embError) {
+        console.warn('Failed to delete document embeddings:', embError);
+      }
 
       toast({
         title: "Success",
