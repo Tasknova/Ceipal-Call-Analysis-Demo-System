@@ -35,7 +35,11 @@ import {
   Code,
   Users,
   Sparkles,
-  FolderKanban
+  FolderKanban,
+  File,
+  FileImage,
+  Download,
+  ExternalLink
 } from "lucide-react";
 import {
   Select,
@@ -66,16 +70,62 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
 
   // Upload dialog
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editDocumentDialogOpen, setEditDocumentDialogOpen] = useState(false);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<string | null>(null);
+  const [documentToEdit, setDocumentToEdit] = useState<ProjectDocument | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadFormData, setUploadFormData] = useState({
     description: "",
     tags: "",
     category: ""
   });
+  const [editFormData, setEditFormData] = useState({
+    description: "",
+    tags: "",
+    category: ""
+  });
+  const [customCategory, setCustomCategory] = useState("");
+  const [existingCategories, setExistingCategories] = useState<string[]>([]);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   // Tech stack input
   const [techStackInput, setTechStackInput] = useState("");
   const [keyGoalsInput, setKeyGoalsInput] = useState("");
+
+  // Helper function to get file icon
+  const getFileIcon = (fileType: string, mimeType?: string) => {
+    const type = fileType?.toLowerCase() || '';
+    const mime = mimeType?.toLowerCase() || '';
+    
+    if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(type)) {
+      return FileImage;
+    } else if (type === 'pdf' || mime === 'application/pdf') {
+      return FileText;
+    } else if (['doc', 'docx', 'txt'].includes(type) || mime.includes('text') || mime.includes('document')) {
+      return FileText;
+    }
+    return File;
+  };
+
+  // Helper function to format file size
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  // Helper function to group documents by category
+  const groupDocumentsByCategory = () => {
+    const grouped: { [key: string]: ProjectDocument[] } = {};
+    documents.forEach(doc => {
+      const category = doc.category || 'Uncategorized';
+      if (!grouped[category]) grouped[category] = [];
+      grouped[category].push(doc);
+    });
+    return grouped;
+  };
 
   useEffect(() => {
     if (user && projectId) {
@@ -124,6 +174,10 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
 
       if (docsError) throw docsError;
       setDocuments(docsData || []);
+      
+      // Extract unique categories
+      const categories = [...new Set(docsData.map(doc => doc.category).filter(Boolean) as string[])];
+      setExistingCategories(categories);
     } catch (error) {
       console.error('Error loading project data:', error);
       toast({
@@ -268,14 +322,83 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
     }
   };
 
-  const handleDeleteDocument = async (documentId: string) => {
-    if (!user) return;
+  const openDeleteDialog = (documentId: string) => {
+    setDocumentToDelete(documentId);
+    setDeleteDialogOpen(true);
+  };
+
+  const openEditDocumentDialog = (doc: ProjectDocument) => {
+    setDocumentToEdit(doc);
+    setEditFormData({
+      description: doc.description || "",
+      tags: doc.tags?.join(", ") || "",
+      category: doc.category || ""
+    });
+    setEditDocumentDialogOpen(true);
+  };
+
+  const handleUpdateDocument = async () => {
+    if (!user || !documentToEdit) return;
+
+    try {
+      const tags = editFormData.tags.split(',').map(t => t.trim()).filter(Boolean);
+      
+      const { error } = await supabase
+        .from('project_documents')
+        .update({
+          description: editFormData.description || null,
+          tags: tags.length > 0 ? tags : null,
+          category: editFormData.category || null
+        })
+        .eq('id', documentToEdit.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Document updated successfully"
+      });
+
+      setEditDocumentDialogOpen(false);
+      setDocumentToEdit(null);
+      loadProjectData();
+    } catch (error) {
+      console.error('Error updating document:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update document",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleAddCategory = () => {
+    if (newCategoryName.trim() && !existingCategories.includes(newCategoryName.trim())) {
+      setExistingCategories([...existingCategories, newCategoryName.trim()]);
+      setNewCategoryName("");
+      toast({
+        title: "Success",
+        description: "Category added successfully"
+      });
+    }
+  };
+
+  const handleDeleteCategory = (category: string) => {
+    setExistingCategories(existingCategories.filter(cat => cat !== category));
+    toast({
+      title: "Success",
+      description: "Category removed"
+    });
+  };
+
+  const handleDeleteDocument = async () => {
+    if (!user || !documentToDelete) return;
 
     try {
       const { error } = await supabase
         .from('project_documents')
         .update({ is_deleted: true })
-        .eq('id', documentId);
+        .eq('id', documentToDelete);
 
       if (error) throw error;
 
@@ -284,6 +407,8 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
         description: "Document deleted successfully"
       });
 
+      setDeleteDialogOpen(false);
+      setDocumentToDelete(null);
       loadProjectData();
     } catch (error) {
       console.error('Error deleting document:', error);
@@ -680,24 +805,30 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
                 <div>
                   <CardTitle>Project Documents</CardTitle>
                   <CardDescription>
-                    Upload documents to enhance your Project Brain
+                    Upload and manage your project documents ({documents.length} files)
                   </CardDescription>
                 </div>
-                <Button onClick={() => document.getElementById('file-upload')?.click()}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Document
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setCategoryDialogOpen(true)}>
+                    <FolderKanban className="h-4 w-4 mr-2" />
+                    Manage Groups
+                  </Button>
+                  <Button onClick={() => document.getElementById('file-upload')?.click()}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Document
+                  </Button>
+                </div>
                 <input
                   id="file-upload"
                   type="file"
                   className="hidden"
                   onChange={handleFileSelect}
-                  accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg"
+                  accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.webp"
                 />
               </div>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[600px]">
+              <ScrollArea className="h-[600px] pr-4">
                 {documents.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12">
                     <FileText className="h-12 w-12 text-muted-foreground mb-4" />
@@ -707,39 +838,129 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
                     </p>
                   </div>
                 ) : (
-                  <div className="grid gap-4">
-                    {documents.map((doc) => (
-                      <Card key={doc.id}>
-                        <CardHeader>
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <CardTitle className="text-base">{doc.file_name}</CardTitle>
-                              <CardDescription className="mt-1">
-                                {doc.description || "No description"}
-                              </CardDescription>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteDocument(doc.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex flex-wrap gap-2">
-                            {doc.tags?.map((tag, index) => (
-                              <Badge key={index} variant="outline">
-                                {tag}
-                              </Badge>
-                            ))}
-                            {doc.category && (
-                              <Badge variant="secondary">{doc.category}</Badge>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
+                  <div className="space-y-6">
+                    {Object.entries(groupDocumentsByCategory()).map(([category, docs]) => (
+                      <div key={category}>
+                        <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                          <FolderKanban className="h-4 w-4" />
+                          {category} ({docs.length})
+                        </h3>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                          {docs.map((doc) => {
+                            const FileIcon = getFileIcon(doc.file_type || '', doc.mime_type);
+                            const isImage = doc.mime_type?.startsWith('image/');
+                            
+                            return (
+                              <Card 
+                                key={doc.id} 
+                                className="group hover:shadow-md transition-all cursor-pointer relative overflow-hidden"
+                                onClick={() => doc.storage_url && window.open(doc.storage_url, '_blank')}
+                              >
+                                <CardContent className="p-4">
+                                  {/* Preview/Icon */}
+                                  <div className="aspect-square rounded-md bg-muted mb-3 flex items-center justify-center overflow-hidden">
+                                    {isImage && doc.storage_url ? (
+                                      <img 
+                                        src={doc.storage_url} 
+                                        alt={doc.file_name}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <FileIcon className="h-12 w-12 text-muted-foreground" />
+                                    )}
+                                  </div>
+                                  
+                                  {/* File Info */}
+                                  <div className="space-y-1">
+                                    <p className="text-sm font-medium truncate" title={doc.file_name}>
+                                      {doc.file_name}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {doc.file_size ? formatFileSize(doc.file_size) : 'Unknown size'}
+                                    </p>
+                                    {doc.description && (
+                                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                                        {doc.description}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  {/* Tags */}
+                                  {doc.tags && doc.tags.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                      {doc.tags.slice(0, 2).map((tag, index) => (
+                                        <Badge key={index} variant="outline" className="text-xs">
+                                          {tag}
+                                        </Badge>
+                                      ))}
+                                      {doc.tags.length > 2 && (
+                                        <Badge variant="outline" className="text-xs">
+                                          +{doc.tags.length - 2}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Action Buttons - Show on Hover */}
+                                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                    <Button
+                                      variant="secondary"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openEditDocumentDialog(doc);
+                                      }}
+                                    >
+                                      <Edit className="h-3 w-3" />
+                                    </Button>
+                                    {doc.storage_url && (
+                                      <Button
+                                        variant="secondary"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          window.open(doc.storage_url, '_blank');
+                                        }}
+                                      >
+                                        <ExternalLink className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                    <Button
+                                      variant="secondary"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (doc.storage_url) {
+                                          const a = document.createElement('a');
+                                          a.href = doc.storage_url;
+                                          a.download = doc.file_name;
+                                          a.click();
+                                        }
+                                      }}
+                                    >
+                                      <Download className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openDeleteDialog(doc.id);
+                                      }}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -786,11 +1007,40 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
 
             <div>
               <Label>Category</Label>
-              <Input
+              <Select
                 value={uploadFormData.category}
-                onChange={(e) => setUploadFormData({ ...uploadFormData, category: e.target.value })}
-                placeholder="e.g., requirements, design"
-              />
+                onValueChange={(value) => {
+                  if (value === 'custom') {
+                    setUploadFormData({ ...uploadFormData, category: '' });
+                  } else {
+                    setUploadFormData({ ...uploadFormData, category: value });
+                    setCustomCategory('');
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select or create category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {existingCategories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom">+ Create New Category</SelectItem>
+                </SelectContent>
+              </Select>
+              {(uploadFormData.category === '' || customCategory) && (
+                <Input
+                  className="mt-2"
+                  value={customCategory || uploadFormData.category}
+                  onChange={(e) => {
+                    setCustomCategory(e.target.value);
+                    setUploadFormData({ ...uploadFormData, category: e.target.value });
+                  }}
+                  placeholder="Enter new category name"
+                />
+              )}
             </div>
           </div>
 
@@ -801,6 +1051,169 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
             <Button onClick={handleUploadDocument} disabled={isUploading}>
               {isUploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Upload
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Document</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this document? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteDocument}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Document Dialog */}
+      <Dialog open={editDocumentDialogOpen} onOpenChange={setEditDocumentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Document</DialogTitle>
+            <DialogDescription>
+              Update document information
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label>File Name</Label>
+              <p className="text-sm text-muted-foreground">{documentToEdit?.file_name}</p>
+            </div>
+
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                value={editFormData.description}
+                onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                placeholder="Brief description of the document"
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <Label>Tags (comma-separated)</Label>
+              <Input
+                value={editFormData.tags}
+                onChange={(e) => setEditFormData({ ...editFormData, tags: e.target.value })}
+                placeholder="e.g., requirements, design, technical"
+              />
+            </div>
+
+            <div>
+              <Label>Category</Label>
+              <Select
+                value={editFormData.category}
+                onValueChange={(value) => {
+                  if (value === 'custom') {
+                    setEditFormData({ ...editFormData, category: '' });
+                  } else {
+                    setEditFormData({ ...editFormData, category: value });
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select or create category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {existingCategories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom">+ Create New Category</SelectItem>
+                </SelectContent>
+              </Select>
+              {editFormData.category === '' && (
+                <Input
+                  className="mt-2"
+                  value={editFormData.category}
+                  onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
+                  placeholder="Enter new category name"
+                />
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDocumentDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateDocument}>
+              Update
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Categories Dialog */}
+      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage Document Groups</DialogTitle>
+            <DialogDescription>
+              Create and manage categories to organize your documents
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label>Add New Group</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="Enter group name"
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
+                />
+                <Button onClick={handleAddCategory}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <Label>Existing Groups</Label>
+              <ScrollArea className="h-[200px] rounded-md border p-4 mt-2">
+                {existingCategories.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No groups yet. Create one above.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {existingCategories.map((category) => (
+                      <div key={category} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
+                        <span className="text-sm">{category}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => handleDeleteCategory(category)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setCategoryDialogOpen(false)}>
+              Done
             </Button>
           </DialogFooter>
         </DialogContent>
