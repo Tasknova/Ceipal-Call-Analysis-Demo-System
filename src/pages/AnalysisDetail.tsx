@@ -731,6 +731,97 @@ export default function AnalysisDetail() {
               )}
             </div>
 
+            {/* Context and Accuracy Scores */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Company Context Accuracy */}
+              {(analysis.company_accuracy_score !== null || analysis.company_accuracy_reasoning) && (
+                <Card className="bg-white border-slate-200 shadow-md">
+                  <CardHeader className="border-b border-slate-100">
+                    <CardTitle className="flex items-center gap-3 text-lg">
+                      <div className="p-2 bg-cyan-100 rounded-lg">
+                        <ShieldCheck className="h-5 w-5 text-cyan-600" />
+                      </div>
+                      Company Context Accuracy
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-4">
+                    {analysis.company_accuracy_score !== null && (
+                      <div className="flex items-center gap-4">
+                        <div className={`text-3xl font-bold ${getScoreColor(analysis.company_accuracy_score)}`}>
+                          {analysis.company_accuracy_score}%
+                        </div>
+                        <div className="flex-1">
+                          <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${getProgressColor(analysis.company_accuracy_score)} transition-all duration-300`}
+                              style={{ width: `${analysis.company_accuracy_score}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {analysis.company_accuracy_reasoning && (
+                      <p className="text-slate-700 leading-relaxed">
+                        {analysis.company_accuracy_reasoning}
+                      </p>
+                    )}
+                    {analysis.ceipal_context_used && (
+                      <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <p className="text-sm font-medium text-slate-900 mb-2">Context Used:</p>
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                          {analysis.ceipal_context_used}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Project Context Accuracy */}
+              {(analysis.project_accuracy_score !== null || analysis.project_accuracy_reasoning) && (
+                <Card className="bg-white border-slate-200 shadow-md">
+                  <CardHeader className="border-b border-slate-100">
+                    <CardTitle className="flex items-center gap-3 text-lg">
+                      <div className="p-2 bg-teal-100 rounded-lg">
+                        <Target className="h-5 w-5 text-teal-600" />
+                      </div>
+                      Project Context Accuracy
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-4">
+                    {analysis.project_accuracy_score !== null && (
+                      <div className="flex items-center gap-4">
+                        <div className={`text-3xl font-bold ${getScoreColor(analysis.project_accuracy_score)}`}>
+                          {analysis.project_accuracy_score}%
+                        </div>
+                        <div className="flex-1">
+                          <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${getProgressColor(analysis.project_accuracy_score)} transition-all duration-300`}
+                              style={{ width: `${analysis.project_accuracy_score}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {analysis.project_accuracy_reasoning && (
+                      <p className="text-slate-700 leading-relaxed">
+                        {analysis.project_accuracy_reasoning}
+                      </p>
+                    )}
+                    {analysis.project_context_used && (
+                      <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <p className="text-sm font-medium text-slate-900 mb-2">Context Used:</p>
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                          {analysis.project_context_used}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
             {/* Lead Type Explanation */}
             {analysis.lead_type_explanation && (
               <Card className="bg-white border-slate-200 shadow-md">
