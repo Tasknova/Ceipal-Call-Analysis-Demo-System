@@ -152,13 +152,10 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
   const [leads, setLeads] = useState<Lead[]>([]);
   const [allLeads, setAllLeads] = useState<Lead[]>([]); // Store all leads
   const [leadGroups, setLeadGroups] = useState<LeadGroup[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [selectedLead, setSelectedLead] = useState<string | null>(null);
-  const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [leadSearchOpen, setLeadSearchOpen] = useState(false);
   const [groupSearchOpen, setGroupSearchOpen] = useState(false);
-  const [projectSearchOpen, setProjectSearchOpen] = useState(false);
   const [leadSearchQuery, setLeadSearchQuery] = useState("");
   const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);
   const [callDate, setCallDate] = useState<Date | undefined>(new Date());
@@ -171,7 +168,6 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
     if (open && user) {
       fetchLeadGroups();
       fetchLeads();
-      fetchProjects();
     }
   }, [open, user]);
 
@@ -242,33 +238,7 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
     }
   };
 
-  const fetchProjects = async () => {
-    if (!user) return;
-    
-    try {
-      console.log('Fetching projects for user:', user.id);
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('company_id', user.id)
-        .order('project_name', { ascending: true });
 
-      if (error) {
-        console.error('Error fetching projects:', error);
-        throw error;
-      }
-      
-      console.log('Fetched projects:', data);
-      setProjects(data || []);
-    } catch (error) {
-      console.error('Error fetching projects:', error);
-      toast({
-        title: "Warning",
-        description: "Could not load projects list. You can still upload the recording.",
-        variant: "default",
-      });
-    }
-  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -396,7 +366,6 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
         .insert({
           user_id: user.id,
           lead_id: selectedLead,
-          project_id: selectedProject,
           file_name: fileName.trim(),
           file_size: fileSize,
           stored_file_url: fileUrl,
@@ -459,8 +428,7 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
         analysis_id: analysis?.id || null,
         recording_name: fileName.trim(),
         recording_url: inputMode === "audio" ? fileUrl : null,
-        transcript: inputMode === "transcript" ? transcript.trim() : null,
-        project_id: selectedProject || null
+        transcript: inputMode === "transcript" ? transcript.trim() : null
       };
 
       console.log('🚀 Sending webhook POST request to:', WEBHOOK_URL);
@@ -476,7 +444,6 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
       setFileName("");
       setTranscript("");
       setSelectedLead(null);
-      setSelectedProject(null);
       setCallDate(new Date());
       setCallTime(format(new Date(), "HH:mm"));
       setUploadProgress(0);
@@ -513,7 +480,6 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
     setFileName("");
     setTranscript("");
     setSelectedLead(null);
-    setSelectedProject(null);
     setSelectedGroup(null);
     setCallDate(new Date());
     setCallTime(format(new Date(), "HH:mm"));
@@ -614,69 +580,7 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
             </p>
           </div>
 
-          {/* Project Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="project-select">Associated Project (Optional)</Label>
-            <Popover open={projectSearchOpen} onOpenChange={setProjectSearchOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={projectSearchOpen}
-                  className="w-full justify-between"
-                  disabled={isLoading}
-                >
-                  {selectedProject
-                    ? projects.find((project) => project.id === selectedProject)?.project_name
-                    : "Select a project..."}
-                  <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search projects..." />
-                  <CommandList>
-                    <CommandEmpty>No project found.</CommandEmpty>
-                    <CommandGroup heading="Projects">
-                      <CommandItem
-                        value="none"
-                        onSelect={() => {
-                          setSelectedProject(null);
-                          setProjectSearchOpen(false);
-                        }}
-                      >
-                        <span className="text-muted-foreground">No project</span>
-                      </CommandItem>
-                      {projects.map((project) => (
-                        <CommandItem
-                          key={project.id}
-                          value={project.project_name}
-                          onSelect={() => {
-                            setSelectedProject(project.id);
-                            setProjectSearchOpen(false);
-                          }}
-                        >
-                          <div className="flex flex-col">
-                            <span className="font-medium">{project.project_name}</span>
-                            {project.description && (
-                              <span className="text-xs text-muted-foreground line-clamp-1">
-                                {project.description}
-                              </span>
-                            )}
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            <p className="text-xs text-muted-foreground">
-              Link this call to a specific project for better organization.
-            </p>
-          </div>
-
-          {/* Lead Group Selection */}
+          {/* Lead Group Selection */
           <div className="space-y-2">
             <Label htmlFor="group-select">Lead Group (Optional)</Label>
             <Popover open={groupSearchOpen} onOpenChange={setGroupSearchOpen}>
