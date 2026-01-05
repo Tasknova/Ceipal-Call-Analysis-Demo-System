@@ -199,6 +199,7 @@ export interface ProjectMetadata {
   team_size?: string
   budget_range?: string
   priority_level?: 'low' | 'medium' | 'high' | 'critical'
+  pricing_information?: string // Pricing details in text format
   custom_fields?: any // JSONB
   additional_context?: string
   created_at: string

@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import type { Project, ProjectMetadata, ProjectDocument } from "@/lib/supabase";
+import { storeProjectEmbedding, prepareProjectMetadataForEmbedding, deleteProjectEmbeddingsByType } from "@/lib/projectEmbeddings";
 import {
   Brain,
   Save,
@@ -33,7 +34,8 @@ import {
   File,
   FileImage,
   Download,
-  ExternalLink
+  ExternalLink,
+  DollarSign
 } from "lucide-react";
 import {
   Select,
@@ -202,11 +204,38 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
 
       if (error) throw error;
 
-      // Embeddings will be generated automatically by database trigger
+      // Generate and store embeddings for the updated metadata
+      try {
+        // Delete old metadata embeddings first
+        await deleteProjectEmbeddingsByType(supabase, projectId, 'project_metadata');
+        
+        // Prepare content for embedding (includes pricing information now)
+        const content = prepareProjectMetadataForEmbedding(metadata, project.project_name);
+        
+        // Store new embedding
+        await storeProjectEmbedding(supabase, {
+          projectId,
+          companyId: user.id,
+          contentType: 'project_metadata',
+          contentId: projectId,
+          content,
+          metadata: {
+            project_name: project.project_name,
+            domain: metadata.domain,
+            industry: metadata.industry,
+            has_pricing_info: !!(metadata.pricing_information)
+          }
+        });
+        
+        console.log('✅ Project metadata embeddings regenerated successfully');
+      } catch (embeddingError) {
+        console.warn('⚠️ Failed to generate embeddings, but metadata was saved:', embeddingError);
+        // Don't fail the entire save operation if embeddings fail
+      }
 
       toast({
         title: "Success",
-        description: "Project metadata saved successfully"
+        description: "Project metadata saved successfully (including embeddings)"
       });
 
       setIsEditing(false);
@@ -744,6 +773,58 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
                         ) : (
                           <p className="text-sm mt-1 whitespace-pre-wrap">{metadata.requirements || "Not specified"}</p>
                         )}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  {/* Pricing Information Section */}
+                  <AccordionItem value="pricing" className="border rounded-lg px-4">
+                    <AccordionTrigger className="hover:no-underline">
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="h-5 w-5 text-emerald-500" />
+                        <span className="text-lg font-semibold">Pricing & Quote Guidelines</span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="space-y-4 pt-4">
+                      <div>
+                        <Label>Pricing Information</Label>
+                        {isEditing ? (
+                          <Textarea
+                            value={metadata.pricing_information || ""}
+                            onChange={(e) => setMetadata({ ...metadata, pricing_information: e.target.value })}
+                            placeholder="Enter pricing details, quote ranges, and ROI talking points...
+
+Example:
+Base Quote Range: $150,000 - $300,000 (Annual License)
+Pricing Model: SaaS Subscription - Per User/Per Month
+
+Quote Guidelines:
+  Small Agency: $150K-$250K/year (10-25 recruiters, Professional tier)
+  Mid-Market: $300K-$600K/year (25-75 recruiters, Professional/Enterprise)
+  Enterprise: $700K-$1.2M+/year (75+ recruiters, Enterprise tier with customization)
+  Discount Strategy: Annual commitment: 10-15% off, Multi-year: 20-25% off
+
+ROI Talking Points:
+  • Reduce time-to-hire by 40-50%: Save $50K-$200K annually in recruiter time
+  • Increase placements by 30%: Additional $500K-$2M in revenue for staffing firms
+  • Reduce cost-per-hire by 35%: Save $100K-$500K on recruitment costs
+  • Improve recruiter productivity by 60%: Handle 2x more reqs per recruiter
+  • Typical ROI: 3-6 months for mid-market, 6-12 months for enterprise"
+                            rows={15}
+                            className="font-mono text-sm"
+                          />
+                        ) : (
+                          <div className="mt-2 p-4 bg-muted/30 rounded-lg border">
+                            {metadata.pricing_information ? (
+                              <pre className="text-sm whitespace-pre-wrap font-sans">{metadata.pricing_information}</pre>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No pricing information set. Click Edit to add pricing details and quote guidelines.</p>
+                            )}
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Include pricing tiers, quote ranges by customer size, discount strategies, and ROI talking points for sales reference
+                        </p>
                       </div>
                     </AccordionContent>
                   </AccordionItem>

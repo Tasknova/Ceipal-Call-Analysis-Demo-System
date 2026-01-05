@@ -489,331 +489,331 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <div className="h-5 w-5 rounded bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center">
-              <span className="text-white font-bold text-xs">C</span>
-            </div>
-            <Upload className="h-5 w-5" />
-            Add New Call
-          </DialogTitle>
-          <DialogDescription>
-            Upload an audio/video file or paste a transcript for analysis by <span className="font-semibold text-primary">Ceipal</span> AI.
-          </DialogDescription>
-        </DialogHeader>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="h-5 w-5 rounded bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center">
+                <span className="text-white font-bold text-xs">C</span>
+              </div>
+              <Upload className="h-5 w-5" />
+              Add New Call
+            </DialogTitle>
+            <DialogDescription>
+              Upload an audio/video file or paste a transcript for analysis by <span className="font-semibold text-primary">Ceipal</span> AI.
+            </DialogDescription>
+          </DialogHeader>
         
-        <form onSubmit={handleSubmit} className="space-y-4 pb-4">
-          <Tabs value={inputMode} onValueChange={(value) => setInputMode(value as "audio" | "transcript")} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="audio" className="flex items-center gap-2">
-                <FileAudio className="h-4 w-4" />
-                Upload Audio
-              </TabsTrigger>
-              <TabsTrigger value="transcript" className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Paste Transcript
-              </TabsTrigger>
-            </TabsList>
+          <form onSubmit={handleSubmit} className="space-y-4 pb-4">
+            <Tabs value={inputMode} onValueChange={(value) => setInputMode(value as "audio" | "transcript")} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="audio" className="flex items-center gap-2">
+                  <FileAudio className="h-4 w-4" />
+                  Upload Audio
+                </TabsTrigger>
+                <TabsTrigger value="transcript" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Paste Transcript
+                </TabsTrigger>
+              </TabsList>
             
-            <TabsContent value="audio" className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="audio-file">Audio/Video File *</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="audio-file"
-                    type="file"
-                    accept="audio/*,video/mp4,video/webm,.mp3,.wav,.m4a,.ogg,.webm,.flac"
-                    onChange={handleFileChange}
-                    disabled={isLoading}
-                    required={inputMode === "audio"}
-                    className="cursor-pointer"
-                  />
+              <TabsContent value="audio" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="audio-file">Audio/Video File *</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="audio-file"
+                      type="file"
+                      accept="audio/*,video/mp4,video/webm,.mp3,.wav,.m4a,.ogg,.webm,.flac"
+                      onChange={handleFileChange}
+                      disabled={isLoading}
+                      required={inputMode === "audio"}
+                      className="cursor-pointer"
+                    />
+                    {selectedFile && (
+                      <FileAudio className="h-5 w-5 text-green-600 flex-shrink-0" />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Supported formats: MP3, WAV, M4A, OGG, WEBM, FLAC, MP4. Max size: 100MB.
+                  </p>
                   {selectedFile && (
-                    <FileAudio className="h-5 w-5 text-green-600 flex-shrink-0" />
+                    <p className="text-xs text-green-600 font-medium">
+                      Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                    </p>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Supported formats: MP3, WAV, M4A, OGG, WEBM, FLAC, MP4. Max size: 100MB.
-                </p>
-                {selectedFile && (
-                  <p className="text-xs text-green-600 font-medium">
-                    Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
-                  </p>
-                )}
-              </div>
-            </TabsContent>
+              </TabsContent>
             
-            <TabsContent value="transcript" className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="transcript">Transcript *</Label>
-                <Textarea
-                  id="transcript"
-                  placeholder="Paste your call transcript here..."
-                  value={transcript}
-                  onChange={(e) => setTranscript(e.target.value)}
-                  disabled={isLoading}
-                  required={inputMode === "transcript"}
-                  className="min-h-[200px] resize-y"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Paste the complete transcript of your call for AI analysis.
-                </p>
-              </div>
-            </TabsContent>
-          </Tabs>
+              <TabsContent value="transcript" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="transcript">Transcript *</Label>
+                  <Textarea
+                    id="transcript"
+                    placeholder="Paste your call transcript here..."
+                    value={transcript}
+                    onChange={(e) => setTranscript(e.target.value)}
+                    disabled={isLoading}
+                    required={inputMode === "transcript"}
+                    className="min-h-[200px] resize-y"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Paste the complete transcript of your call for AI analysis.
+                  </p>
+                </div>
+              </TabsContent>
+            </Tabs>
           
-          <div className="space-y-2">
-            <Label htmlFor="file-name">Recording Name *</Label>
-            <Input
-              id="file-name"
-              type="text"
-              placeholder="e.g., Sales Call - John Doe"
-              value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
-              disabled={isLoading}
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              Choose a unique, descriptive name for this recording.
-            </p>
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="file-name">Recording Name *</Label>
+              <Input
+                id="file-name"
+                type="text"
+                placeholder="e.g., Sales Call - John Doe"
+                value={fileName}
+                onChange={(e) => setFileName(e.target.value)}
+                disabled={isLoading}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Choose a unique, descriptive name for this recording.
+              </p>
+            </div>
 
-          {/* Lead Group Selection */
-          <div className="space-y-2">
-            <Label htmlFor="group-select">Lead Group (Optional)</Label>
-            <Popover open={groupSearchOpen} onOpenChange={setGroupSearchOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={groupSearchOpen}
-                  className="w-full justify-between"
-                  disabled={isLoading}
-                >
-                  {selectedGroup
-                    ? leadGroups.find((group) => group.id === selectedGroup)?.group_name
-                    : "All groups"}
-                  <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search groups..." />
-                  <CommandList>
-                    <CommandEmpty>No group found.</CommandEmpty>
-                    <CommandGroup heading="Lead Groups">
-                      <CommandItem
-                        value="all"
-                        onSelect={() => {
-                          setSelectedGroup(null);
-                          setGroupSearchOpen(false);
-                          setSelectedLead(null); // Clear lead selection when changing group
-                        }}
-                      >
-                        <span className="font-medium">All Groups</span>
-                      </CommandItem>
-                      {leadGroups.map((group) => (
+            {/* Lead Group Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="group-select">Lead Group (Optional)</Label>
+              <Popover open={groupSearchOpen} onOpenChange={setGroupSearchOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={groupSearchOpen}
+                    className="w-full justify-between"
+                    disabled={isLoading}
+                  >
+                    {selectedGroup
+                      ? leadGroups.find((group) => group.id === selectedGroup)?.group_name
+                      : "All groups"}
+                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search groups..." />
+                    <CommandList>
+                      <CommandEmpty>No group found.</CommandEmpty>
+                      <CommandGroup heading="Lead Groups">
                         <CommandItem
-                          key={group.id}
-                          value={group.group_name}
+                          value="all"
                           onSelect={() => {
-                            setSelectedGroup(group.id);
+                            setSelectedGroup(null);
                             setGroupSearchOpen(false);
                             setSelectedLead(null); // Clear lead selection when changing group
                           }}
                         >
-                          <div className="flex flex-col">
-                            <span className="font-medium">{group.group_name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {allLeads.filter(l => l.group_id === group.id).length} leads
-                            </span>
-                          </div>
+                          <span className="font-medium">All Groups</span>
                         </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            <p className="text-xs text-muted-foreground">
-              Filter leads by group or select from all leads.
-            </p>
-          </div>
-
-          {/* Lead Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="lead-select">Associated Lead (Optional)</Label>
-            <Popover open={leadSearchOpen} onOpenChange={setLeadSearchOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={leadSearchOpen}
-                  className="w-full justify-between"
-                  disabled={isLoading}
-                >
-                  {selectedLead
-                    ? leads.find((lead) => lead.id === selectedLead)?.name
-                    : "Select a lead..."}
-                  <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0" align="start">
-                <Command>
-                  <CommandInput 
-                    placeholder="Search leads..." 
-                    value={leadSearchQuery}
-                    onValueChange={setLeadSearchQuery}
-                  />
-                  <CommandList>
-                    <CommandEmpty>No lead found.</CommandEmpty>
-                    <CommandGroup heading="Leads">
-                      {leads.map((lead) => (
-                        <CommandItem
-                          key={lead.id}
-                          value={lead.name}
-                          onSelect={() => {
-                            setSelectedLead(lead.id);
-                            setLeadSearchOpen(false);
-                          }}
-                        >
-                          <User className="mr-2 h-4 w-4" />
-                          <div className="flex flex-col">
-                            <span className="font-medium">{lead.name}</span>
-                            <span className="text-xs text-muted-foreground">{lead.email}</span>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                    <CommandSeparator />
-                    <CommandGroup>
-                      <CommandItem
-                        onSelect={() => {
-                          setLeadSearchOpen(false);
-                          setIsAddLeadModalOpen(true);
-                        }}
-                        className="text-accent-blue"
-                      >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Create New Lead
-                      </CommandItem>
-                      {selectedLead && (
-                        <CommandItem
-                          onSelect={() => {
-                            setSelectedLead(null);
-                            setLeadSearchOpen(false);
-                          }}
-                          className="text-muted-foreground"
-                        >
-                          Clear Selection
-                        </CommandItem>
-                      )}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            <p className="text-xs text-muted-foreground">
-              Associate this recording with a lead for better organization.
-            </p>
-          </div>
-
-          {/* Call Date and Time */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="call-date">Call Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !callDate && "text-muted-foreground"
-                    )}
-                    disabled={isLoading}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {callDate ? format(callDate, "PPP") : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={callDate}
-                    onSelect={setCallDate}
-                    initialFocus
-                  />
+                        {leadGroups.map((group) => (
+                          <CommandItem
+                            key={group.id}
+                            value={group.group_name}
+                            onSelect={() => {
+                              setSelectedGroup(group.id);
+                              setGroupSearchOpen(false);
+                              setSelectedLead(null); // Clear lead selection when changing group
+                            }}
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-medium">{group.group_name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {allLeads.filter(l => l.group_id === group.id).length} leads
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
                 </PopoverContent>
               </Popover>
               <p className="text-xs text-muted-foreground">
-                When did this call take place?
+                Filter leads by group or select from all leads.
               </p>
             </div>
 
+            {/* Lead Selection */}
             <div className="space-y-2">
-              <Label htmlFor="call-time">Call Time</Label>
-              <Input
-                id="call-time"
-                type="time"
-                value={callTime}
-                onChange={(e) => setCallTime(e.target.value)}
-                disabled={isLoading}
-                className="w-full"
-              />
+              <Label htmlFor="lead-select">Associated Lead (Optional)</Label>
+              <Popover open={leadSearchOpen} onOpenChange={setLeadSearchOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={leadSearchOpen}
+                    className="w-full justify-between"
+                    disabled={isLoading}
+                  >
+                    {selectedLead
+                      ? leads.find((lead) => lead.id === selectedLead)?.name
+                      : "Select a lead..."}
+                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0" align="start">
+                  <Command>
+                    <CommandInput 
+                      placeholder="Search leads..." 
+                      value={leadSearchQuery}
+                      onValueChange={setLeadSearchQuery}
+                    />
+                    <CommandList>
+                      <CommandEmpty>No lead found.</CommandEmpty>
+                      <CommandGroup heading="Leads">
+                        {leads.map((lead) => (
+                          <CommandItem
+                            key={lead.id}
+                            value={lead.name}
+                            onSelect={() => {
+                              setSelectedLead(lead.id);
+                              setLeadSearchOpen(false);
+                            }}
+                          >
+                            <User className="mr-2 h-4 w-4" />
+                            <div className="flex flex-col">
+                              <span className="font-medium">{lead.name}</span>
+                              <span className="text-xs text-muted-foreground">{lead.email}</span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                      <CommandSeparator />
+                      <CommandGroup>
+                        <CommandItem
+                          onSelect={() => {
+                            setLeadSearchOpen(false);
+                            setIsAddLeadModalOpen(true);
+                          }}
+                          className="text-accent-blue"
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Create New Lead
+                        </CommandItem>
+                        {selectedLead && (
+                          <CommandItem
+                            onSelect={() => {
+                              setSelectedLead(null);
+                              setLeadSearchOpen(false);
+                            }}
+                            className="text-muted-foreground"
+                          >
+                            Clear Selection
+                          </CommandItem>
+                        )}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
               <p className="text-xs text-muted-foreground">
-                Time of the call
+                Associate this recording with a lead for better organization.
               </p>
             </div>
-          </div>
 
-          {isLoading && uploadProgress > 0 && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Progress</span>
-                <span className="font-medium">{uploadProgress}%</span>
+            {/* Call Date and Time */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="call-date">Call Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !callDate && "text-muted-foreground"
+                      )}
+                      disabled={isLoading}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {callDate ? format(callDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={callDate}
+                      onSelect={setCallDate}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">
+                  When did this call take place?
+                </p>
               </div>
-              <Progress value={uploadProgress} className="h-2" />
+
+              <div className="space-y-2">
+                <Label htmlFor="call-time">Call Time</Label>
+                <Input
+                  id="call-time"
+                  type="time"
+                  value={callTime}
+                  onChange={(e) => setCallTime(e.target.value)}
+                  disabled={isLoading}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Time of the call
+                </p>
+              </div>
             </div>
-          )}
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleCancel}
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Adding...
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Add Recording
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            {isLoading && uploadProgress > 0 && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Progress</span>
+                  <span className="font-medium">{uploadProgress}%</span>
+                </div>
+                <Progress value={uploadProgress} className="h-2" />
+              </div>
+            )}
 
-    {/* Add Lead Modal - Rendered outside main dialog to avoid z-index issues */}
-    <AddLeadModal 
-      isOpen={isAddLeadModalOpen}
-      onClose={() => setIsAddLeadModalOpen(false)}
-      onLeadAdded={(leadId) => {
-        setSelectedLead(leadId);
-        fetchLeads(); // Refresh leads list
-      }}
-    />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCancel}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Add Recording
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Lead Modal - Rendered outside main dialog to avoid z-index issues */}
+      <AddLeadModal 
+        isOpen={isAddLeadModalOpen}
+        onClose={() => setIsAddLeadModalOpen(false)}
+        onLeadAdded={(leadId) => {
+          setSelectedLead(leadId);
+          fetchLeads(); // Refresh leads list
+        }}
+      />
     </>
   );
 }

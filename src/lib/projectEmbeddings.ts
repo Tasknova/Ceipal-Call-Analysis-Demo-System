@@ -148,6 +148,12 @@ export function prepareProjectMetadataForEmbedding(metadata: Partial<ProjectMeta
   if (metadata.priority_level) parts.push(`Priority: ${metadata.priority_level}`);
   if (metadata.additional_context) parts.push(`Additional Context: ${metadata.additional_context}`);
 
+  // Include pricing information from the dedicated column
+  if (metadata.pricing_information) {
+    parts.push('\n--- Pricing Information ---');
+    parts.push(metadata.pricing_information);
+  }
+
   return parts.join('\n');
 }
 
