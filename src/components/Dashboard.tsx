@@ -328,14 +328,14 @@ export default function Dashboard({ onShowProfile, onShowBrain, onShowProjects }
                 Leads
               </Button>
               
-              {/* Projects Section */}
+              {/* Products Section */}
               <Button 
                 variant="ghost"
                 className="w-full justify-start font-medium text-sm transition-all text-muted-foreground hover:text-foreground hover:bg-gray-50"
                 onClick={onShowProjects}
               >
                 <FolderKanban className="h-4 w-4 mr-3" />
-                Projects
+                Products
               </Button>
               
               {/* Brain Section */}

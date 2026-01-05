@@ -99,7 +99,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
       console.error('Error loading projects:', error);
       toast({
         title: "Error",
-        description: "Failed to load projects",
+        description: "Failed to load products",
         variant: "destructive"
       });
     } finally {
@@ -145,7 +145,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
 
       toast({
         title: "Success",
-        description: "Project created successfully"
+        description: "Product created successfully"
       });
 
       setCreateDialogOpen(false);
@@ -161,7 +161,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
       console.error('Error creating project:', error);
       toast({
         title: "Error",
-        description: "Failed to create project",
+        description: "Failed to create product",
         variant: "destructive"
       });
     } finally {
@@ -174,7 +174,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
     if (!formData.project_name.trim()) {
       toast({
         title: "Validation Error",
-        description: "Project name is required",
+        description: "Product name is required",
         variant: "destructive"
       });
       return;
@@ -199,7 +199,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
 
       toast({
         title: "Success",
-        description: "Project updated successfully"
+        description: "Product updated successfully"
       });
 
       setEditDialogOpen(false);
@@ -210,7 +210,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
       console.error('Error updating project:', error);
       toast({
         title: "Error",
-        description: "Failed to update project",
+        description: "Failed to update product",
         variant: "destructive"
       });
     } finally {
@@ -253,7 +253,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
 
       toast({
         title: "Success",
-        description: "Project and all related data deleted permanently"
+        description: "Product and all related data deleted permanently"
       });
 
       setDeleteDialogOpen(false);
@@ -263,7 +263,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
       console.error('Error deleting project:', error);
       toast({
         title: "Error",
-        description: "Failed to delete project",
+        description: "Failed to delete product",
         variant: "destructive"
       });
     } finally {
@@ -372,10 +372,10 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
             <div>
               <h1 className="text-4xl font-bold flex items-center gap-3 bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
                 <FolderKanban className="h-10 w-10 text-primary" />
-                Projects
+                Products
               </h1>
               <p className="text-muted-foreground mt-2">
-                Manage your projects with dedicated Project Brains
+                Manage your products with dedicated Product Brains
               </p>
             </div>
           </div>
@@ -388,7 +388,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
             size="lg"
           >
             <Plus className="h-5 w-5 mr-2" />
-            New Project
+            New Product
           </Button>
         </div>
 
@@ -400,7 +400,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                   <Input
-                    placeholder="Search projects by name or description..."
+                    placeholder="Search products by name or description..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-11 h-11 text-base"
@@ -425,7 +425,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
           </Card>
         </div>
 
-      {/* Projects Grid */}
+      {/* Products Grid */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -434,14 +434,14 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <FolderKanban className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No projects found</h3>
-            <p className="text-muted-foreground text-center mb-4">
-              {searchQuery ? "Try adjusting your search" : "Create your first project to get started"}
+            <h3 className="text-lg font-semibold mb-2">No products found</h3>
+            <p className="text-muted-foreground text-sm">
+              {searchQuery ? "Try adjusting your search" : "Create your first product to get started"}
             </p>
             {!searchQuery && (
               <Button onClick={() => setCreateDialogOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                Create Project
+                Create Product
               </Button>
             )}
           </CardContent>
@@ -512,24 +512,24 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
       )}
       </div>
 
-      {/* Create Project Dialog */}
+      {/* Create Product Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create New Project</DialogTitle>
+            <DialogTitle>Create New Product</DialogTitle>
             <DialogDescription>
-              Add a new project to organize your work with a dedicated Project Brain
+              Add a new product to organize your work with a dedicated Product Brain
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div>
-              <Label htmlFor="project_name">Project Name *</Label>
+              <Label htmlFor="project_name">Product Name *</Label>
               <Input
                 id="project_name"
                 value={formData.project_name}
                 onChange={(e) => setFormData({ ...formData, project_name: e.target.value })}
-                placeholder="Enter project name"
+                placeholder="Enter product name"
               />
             </div>
 
@@ -539,7 +539,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Brief description of the project"
+                placeholder="Brief description of the product"
                 rows={3}
               />
             </div>
@@ -587,30 +587,30 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
             </Button>
             <Button onClick={handleCreateProject} disabled={isSaving}>
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Create Project
+              Create Product
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Project Dialog */}
+      {/* Edit Product Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Project</DialogTitle>
+            <DialogTitle>Edit Product</DialogTitle>
             <DialogDescription>
-              Update project information
+              Update product information
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div>
-              <Label htmlFor="edit_project_name">Project Name *</Label>
+              <Label htmlFor="edit_project_name">Product Name *</Label>
               <Input
                 id="edit_project_name"
                 value={formData.project_name}
                 onChange={(e) => setFormData({ ...formData, project_name: e.target.value })}
-                placeholder="Enter project name"
+                placeholder="Enter product name"
               />
             </div>
 
@@ -620,7 +620,7 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
                 id="edit_description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Brief description of the project"
+                placeholder="Brief description of the product"
                 rows={3}
               />
             </div>
@@ -668,13 +668,13 @@ export default function ProjectsPage({ onViewProject, onBack }: ProjectsPageProp
             </Button>
             <Button onClick={handleUpdateProject} disabled={isSaving}>
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Update Project
+              Update Product
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Project Dialog */}
+      {/* Delete Product Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>

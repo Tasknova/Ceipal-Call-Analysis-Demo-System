@@ -777,7 +777,7 @@ export default function AnalysisDetail() {
                 </Card>
               )}
 
-              {/* Project Context Accuracy */}
+              {/* Product Context Accuracy */}
               {(analysis.project_accuracy_score !== null || analysis.project_accuracy_reasoning) && (
                 <Card className="bg-white border-slate-200 shadow-md">
                   <CardHeader className="border-b border-slate-100">
@@ -785,7 +785,7 @@ export default function AnalysisDetail() {
                       <div className="p-2 bg-teal-100 rounded-lg">
                         <Target className="h-5 w-5 text-teal-600" />
                       </div>
-                      Project Context Accuracy
+                      Product Context Accuracy
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-6 space-y-4">

@@ -175,10 +175,10 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
       const categories = [...new Set(docsData.map(doc => doc.category).filter(Boolean) as string[])];
       setExistingCategories(categories);
     } catch (error) {
-      console.error('Error loading project data:', error);
+      console.error('Error loading product data:', error);
       toast({
         title: "Error",
-        description: "Failed to load project data",
+        description: "Failed to load product data",
         variant: "destructive"
       });
     } finally {
@@ -227,7 +227,7 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
           }
         });
         
-        console.log('✅ Project metadata embeddings regenerated successfully');
+        console.log('✅ Product metadata embeddings regenerated successfully');
       } catch (embeddingError) {
         console.warn('⚠️ Failed to generate embeddings, but metadata was saved:', embeddingError);
         // Don't fail the entire save operation if embeddings fail
@@ -235,7 +235,7 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
 
       toast({
         title: "Success",
-        description: "Project metadata saved successfully (including embeddings)"
+        description: "Product metadata saved successfully (including embeddings)"
       });
 
       setIsEditing(false);
@@ -244,7 +244,7 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
       console.error('Error saving metadata:', error);
       toast({
         title: "Error",
-        description: "Failed to save project metadata",
+        description: "Failed to save product metadata",
         variant: "destructive"
       });
     } finally {
@@ -558,9 +558,9 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Project Information</CardTitle>
+                  <CardTitle>Product Information</CardTitle>
                   <CardDescription>
-                    Structured data about your project for AI embeddings
+                    Structured data about your product for AI embeddings
                   </CardDescription>
                 </div>
                 {!isEditing ? (
@@ -627,7 +627,7 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
 
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label>Project Type</Label>
+                          <Label>Product Type</Label>
                           {isEditing ? (
                             <Input
                               value={metadata.project_type || ""}
@@ -720,7 +720,7 @@ export default function ProjectBrainPage({ projectId, onBack }: ProjectBrainPage
                           <Textarea
                             value={metadata.target_audience || ""}
                             onChange={(e) => setMetadata({ ...metadata, target_audience: e.target.value })}
-                            placeholder="Who is this project for?"
+                            placeholder="Who is this product for?"
                             rows={3}
                           />
                         ) : (
@@ -893,9 +893,9 @@ ROI Talking Points:
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Project Documents</CardTitle>
+                  <CardTitle>Product Documents</CardTitle>
                   <CardDescription>
-                    Upload and manage your project documents ({documents.length} files)
+                    Upload and manage your product documents ({documents.length} files)
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
@@ -924,7 +924,7 @@ ROI Talking Points:
                     <FileText className="h-12 w-12 text-muted-foreground mb-4" />
                     <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
                     <p className="text-muted-foreground text-center mb-4">
-                      Upload documents to build your Project Brain
+                      Upload documents to build your Product Brain
                     </p>
                   </div>
                 ) : (
@@ -1066,7 +1066,7 @@ ROI Talking Points:
           <DialogHeader>
             <DialogTitle>Upload Document</DialogTitle>
             <DialogDescription>
-              Add a document to your Project Brain
+              Add a document to your Product Brain
             </DialogDescription>
           </DialogHeader>
 

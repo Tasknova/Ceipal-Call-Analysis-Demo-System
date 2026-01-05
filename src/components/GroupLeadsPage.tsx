@@ -212,7 +212,7 @@ export default function GroupLeadsPage() {
                     <TableHeader>
                       <TableRow className="bg-slate-50 hover:bg-slate-50 border-b border-slate-200">
                         <TableHead className="font-semibold text-slate-700">Name</TableHead>
-                        <TableHead className="font-semibold text-slate-700">Project</TableHead>
+                        <TableHead className="font-semibold text-slate-700">Product</TableHead>
                         <TableHead className="font-semibold text-slate-700">Email</TableHead>
                         <TableHead className="font-semibold text-slate-700">Contact</TableHead>
                         <TableHead className="font-semibold text-slate-700">Description</TableHead>
