@@ -366,6 +366,21 @@ export default function Dashboard() {
     return normalized;
   }, [analyses]);
 
+  const overviewSnapshot = useMemo(() => {
+    const topPriority = [...overviewInsights.priorityFlagData].sort((a, b) => b.value - a.value)[0];
+    const topIssue = overviewInsights.topIssueData[0];
+    const topOutcome = overviewInsights.callOutcomeData[0];
+
+    return {
+      topPriorityLabel: topPriority?.name || "N/A",
+      topPriorityCount: topPriority?.value || 0,
+      topIssueLabel: topIssue?.name || "N/A",
+      topIssueCount: topIssue?.count || 0,
+      topOutcomeLabel: topOutcome?.name || "N/A",
+      topOutcomeCount: topOutcome?.value || 0,
+    };
+  }, [overviewInsights]);
+
   const analysisByRecordingId = useMemo(() => {
     const map = new Map<string, Analysis>();
     (analyses || []).forEach((analysis) => {
@@ -739,41 +754,73 @@ export default function Dashboard() {
                     ))}
                   </CardContent>
                 </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Overview Snapshot</CardTitle>
+                    <CardDescription>Most important distribution leaders from analyzed calls</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Top Priority Flag</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {overviewSnapshot.topPriorityLabel} ({overviewSnapshot.topPriorityCount} calls)
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Top Issue Category</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {overviewSnapshot.topIssueLabel} ({overviewSnapshot.topIssueCount} calls)
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Top Call Outcome</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {overviewSnapshot.topOutcomeLabel} ({overviewSnapshot.topOutcomeCount} calls)
+                      </p>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                            <th className="px-3 py-2 font-medium">Risk Signal</th>
+                            <th className="px-3 py-2 text-right font-medium">Count</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-t">
+                            <td className="px-3 py-2 text-slate-700">Compliance Risk</td>
+                            <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                              {overviewInsights.riskSignals.complianceRisk}
+                            </td>
+                          </tr>
+                          <tr className="border-t">
+                            <td className="px-3 py-2 text-slate-700">Process Failure</td>
+                            <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                              {overviewInsights.riskSignals.processFailure}
+                            </td>
+                          </tr>
+                          <tr className="border-t">
+                            <td className="px-3 py-2 text-slate-700">Escalated Calls</td>
+                            <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                              {overviewInsights.riskSignals.escalatedCalls}
+                            </td>
+                          </tr>
+                          <tr className="border-t">
+                            <td className="px-3 py-2 text-slate-700">High Repeat Risk</td>
+                            <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                              {overviewInsights.riskSignals.repeatHighRisk}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Calls</CardTitle>
-                  <CardDescription>Open completed call analyses quickly from here</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {(recordings || []).slice(0, 6).map((recording) => {
-                    const analysis = analyses?.find((a) => a.recording_id === recording.id) || null;
-                    const ready = analysis?.status?.toLowerCase() === "completed";
-                    const displayName = getCallDisplayName(recording.file_name, analysis);
-
-                    return (
-                      <div
-                        key={recording.id}
-                        className={`flex items-center justify-between rounded-lg border p-3 transition-colors ${ready ? "cursor-pointer hover:border-primary" : "opacity-70"}`}
-                        onClick={() => ready && handleRecordingClick(analysis)}
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{displayName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(recording.created_at).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
-                          </p>
-                        </div>
-                        {ready ? <Badge className="bg-accent-blue-light text-primary">View</Badge> : getStatusBadge(analysis?.status)}
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
             </>
           )}
 
