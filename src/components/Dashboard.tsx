@@ -7,9 +7,10 @@ import {
   AlertTriangle,
   BarChart3,
   CheckCircle2,
+  FileText,
   Loader2,
+  PanelRightOpen,
   Phone,
-  Play,
   RefreshCw,
   Trash2,
   TrendingUp,
@@ -19,12 +20,13 @@ import {
 
 import { useToast } from "@/hooks/use-toast";
 import { useAnalysisNotifications } from "@/hooks/useAnalysisNotifications";
-import { Analysis, supabase } from "@/lib/supabase";
+import { Analysis } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useAnalyses, useDashboardStats, useDeleteRecording, useRecordings } from "@/hooks/useSupabaseData";
 import AddRecordingModal from "./AddRecordingModal";
 
@@ -38,6 +40,11 @@ const toNumber = (value: unknown): number => {
 
 const toPercent = (value: number): string => `${Math.max(0, value).toFixed(0)}%`;
 
+const toRatioPercent = (value: number, total: number): string => {
+  if (!total) return "0%";
+  return toPercent((value / total) * 100);
+};
+
 const getAnalysisBucket = (status: string | null | undefined): Exclude<AnalysisFilterStatus, "all"> => {
   const normalized = (status || "pending").toLowerCase();
 
@@ -49,48 +56,21 @@ const getAnalysisBucket = (status: string | null | undefined): Exclude<AnalysisF
 
 const stripFileExtension = (value: string): string => value.replace(/\.[^/.]+$/, "");
 
-const formatDuration = (value: unknown): string => {
-  const seconds = Math.max(0, Math.floor(toNumber(value)));
-  if (!seconds) return "N/A";
+const getTranscriptWordCount = (value: unknown): number => {
+  if (typeof value !== "string") return 0;
 
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remainingSeconds = seconds % 60;
+  const normalized = value.trim();
+  if (!normalized) return 0;
 
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
-  }
-
-  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+  return normalized.split(/\s+/).filter(Boolean).length;
 };
 
-const getDurationSortValue = (value: unknown): number => {
-  if (value === null || value === undefined) return -1;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : -1;
-};
-
-const getDurationFromMediaUrl = (url: string): Promise<number | null> => {
-  return new Promise((resolve) => {
-    const media = document.createElement("audio");
-    const timeout = window.setTimeout(() => cleanup(null), 15000);
-
-    const cleanup = (duration: number | null) => {
-      window.clearTimeout(timeout);
-      media.src = "";
-      resolve(duration);
-    };
-
-    media.preload = "metadata";
-    media.crossOrigin = "anonymous";
-    media.onloadedmetadata = () => {
-      const duration = Number.isFinite(media.duration) && media.duration > 0 ? Math.round(media.duration) : null;
-      cleanup(duration);
-    };
-    media.onerror = () => cleanup(null);
-    media.src = url;
-  });
-};
+const titleize = (value: string): string =>
+  value
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 
 const getCallDisplayName = (fileName: string | null | undefined, analysis: Analysis | null): string => {
   const callId = analysis?.call_overview?.call_id;
@@ -149,7 +129,9 @@ export default function Dashboard() {
   const [callsPage, setCallsPage] = useState(1);
   const [analysisStatusFilter, setAnalysisStatusFilter] = useState<AnalysisFilterStatus>("all");
   const [callSearch, setCallSearch] = useState("");
-  const [isSyncingDurations, setIsSyncingDurations] = useState(false);
+  const [isOverviewSheetOpen, setIsOverviewSheetOpen] = useState(false);
+  const [overviewSheetCallName, setOverviewSheetCallName] = useState("");
+  const [overviewSheetData, setOverviewSheetData] = useState<Record<string, unknown> | null>(null);
 
   const { data: dashboardData, isLoading, error } = useDashboardStats();
   const { data: recordings, isLoading: recordingsLoading } = useRecordings();
@@ -194,6 +176,35 @@ export default function Dashboard() {
       { name: "Pending", value: totals.pending, fill: "hsl(var(--warning))" },
     ];
   }, [analyses]);
+
+  const analysisStatusTotals = useMemo(() => {
+    const getValue = (name: string) => analysisStatusData.find((item) => item.name === name)?.value || 0;
+
+    const completed = getValue("Completed");
+    const processing = getValue("Processing");
+    const failed = getValue("Failed");
+    const pending = getValue("Pending");
+
+    return {
+      completed,
+      processing,
+      failed,
+      pending,
+      total: completed + processing + failed + pending,
+    };
+  }, [analysisStatusData]);
+
+  const reportGeneratedAt = useMemo(
+    () =>
+      new Date().toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    []
+  );
 
   const overviewInsights = useMemo(() => {
     const allAnalyses = analyses || [];
@@ -283,6 +294,45 @@ export default function Dashboard() {
       `Escalation observed in ${riskSignals.escalatedCalls} completed calls.`,
     ];
 
+    const issueBreakdown = Array.from(issueMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({
+        name,
+        count,
+        share: toRatioPercent(count, completedCount),
+      }));
+
+    const outcomeBreakdown = Array.from(callOutcomeMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, value]) => ({
+        name,
+        value,
+        share: toRatioPercent(value, completedCount),
+      }));
+
+    const reportMetrics = [
+      {
+        metric: "Compliance Risk Present",
+        count: riskSignals.complianceRisk,
+        share: toRatioPercent(riskSignals.complianceRisk, completedCount),
+      },
+      {
+        metric: "Process Failure Signal",
+        count: riskSignals.processFailure,
+        share: toRatioPercent(riskSignals.processFailure, completedCount),
+      },
+      {
+        metric: "Escalated Calls",
+        count: riskSignals.escalatedCalls,
+        share: toRatioPercent(riskSignals.escalatedCalls, completedCount),
+      },
+      {
+        metric: "Repeat Call Risk = High",
+        count: riskSignals.repeatHighRisk,
+        share: toRatioPercent(riskSignals.repeatHighRisk, completedCount),
+      },
+    ];
+
     return {
       totalCount,
       completedCount,
@@ -293,6 +343,9 @@ export default function Dashboard() {
       priorityFlagData,
       topIssueData,
       callOutcomeData,
+      issueBreakdown,
+      outcomeBreakdown,
+      reportMetrics,
       riskSignals,
       insightBullets,
     };
@@ -344,10 +397,10 @@ export default function Dashboard() {
           return statusOrder[aStatus] - statusOrder[bStatus];
         }
 
-        const aDuration = getDurationSortValue(a.duration_seconds);
-        const bDuration = getDurationSortValue(b.duration_seconds);
-        if (aDuration !== bDuration) {
-          return bDuration - aDuration;
+        const aWordCount = getTranscriptWordCount(a.transcript);
+        const bWordCount = getTranscriptWordCount(b.transcript);
+        if (aWordCount !== bWordCount) {
+          return bWordCount - aWordCount;
         }
 
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -444,52 +497,19 @@ export default function Dashboard() {
     toast({ title: "Refreshing", description: "Updating call and analysis data." });
   };
 
-  const syncMissingDurations = async () => {
-    if (isSyncingDurations) return;
-
-    const missingDurationCalls = (recordings || []).filter(
-      (recording) => getDurationSortValue(recording.duration_seconds) <= 0 && recording.stored_file_url
-    );
-
-    if (!missingDurationCalls.length) {
-      toast({ title: "No Sync Needed", description: "All calls already have duration." });
+  const openOverviewPanel = (recordingName: string, analysis: Analysis | null) => {
+    if (!analysis || getAnalysisBucket(analysis.status) !== "completed") {
+      toast({
+        title: "Overview not ready",
+        description: "Call overview is available only after analysis is completed.",
+      });
       return;
     }
 
-    setIsSyncingDurations(true);
-    let updatedCount = 0;
-
-    try {
-      for (const recording of missingDurationCalls) {
-        const duration = await getDurationFromMediaUrl(recording.stored_file_url as string);
-        if (!duration) continue;
-
-        const { error: updateError } = await supabase
-          .from("calls")
-          .update({ duration_seconds: duration })
-          .eq("id", recording.id);
-
-        if (!updateError) {
-          updatedCount += 1;
-        }
-      }
-
-      queryClient.invalidateQueries({ queryKey: ["recordings"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
-
-      toast({
-        title: "Duration Sync Complete",
-        description: `Updated ${updatedCount} call${updatedCount === 1 ? "" : "s"} with duration metadata.`,
-      });
-    } catch {
-      toast({
-        title: "Duration Sync Failed",
-        description: "Unable to fetch durations from media files.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSyncingDurations(false);
-    }
+    const callOverview = (analysis.call_overview || {}) as Record<string, unknown>;
+    setOverviewSheetCallName(recordingName);
+    setOverviewSheetData(callOverview);
+    setIsOverviewSheetOpen(true);
   };
 
   const getStatusBadge = (status: string | null | undefined) => {
@@ -705,76 +725,7 @@ export default function Dashboard() {
                 </Card>
               </div>
 
-              <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Priority Flag Distribution</CardTitle>
-                    <CardDescription>Based on final_scoring.priority_flag</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <PieChart>
-                        <Pie data={overviewInsights.priorityFlagData} dataKey="value" nameKey="name" outerRadius={95}>
-                          {overviewInsights.priorityFlagData.map((entry, index) => (
-                            <Cell key={`priority-${index}`} fill={entry.fill} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-
-                <Card className="xl:col-span-2">
-                  <CardHeader>
-                    <CardTitle>Top Issue Categories</CardTitle>
-                    <CardDescription>Most frequent primary_issue_category values</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {overviewInsights.topIssueData.length ? (
-                      <ResponsiveContainer width="100%" height={280}>
-                        <BarChart data={overviewInsights.topIssueData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={70} />
-                          <YAxis allowDecimals={false} />
-                          <Tooltip />
-                          <Bar dataKey="count" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No issue classification data available yet.</p>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
               <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Call Outcome Distribution</CardTitle>
-                    <CardDescription>Based on call_overview.call_outcome</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {overviewInsights.callOutcomeData.length ? (
-                      <ResponsiveContainer width="100%" height={280}>
-                        <PieChart>
-                          <Pie data={overviewInsights.callOutcomeData} dataKey="value" nameKey="name" outerRadius={95}>
-                            {overviewInsights.callOutcomeData.map((entry, index) => (
-                              <Cell
-                                key={`outcome-${index}`}
-                                fill={["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#14B8A6"][index % 6]}
-                              />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No call outcome data available yet.</p>
-                    )}
-                  </CardContent>
-                </Card>
-
                 <Card>
                   <CardHeader>
                     <CardTitle>Actionable Insights</CardTitle>
@@ -837,10 +788,6 @@ export default function Dashboard() {
                   <Button variant="outline" onClick={refreshData}>
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Refresh
-                  </Button>
-                  <Button variant="outline" onClick={syncMissingDurations} disabled={isSyncingDurations}>
-                    {isSyncingDurations ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Waves className="mr-2 h-4 w-4" />}
-                    Sync Durations
                   </Button>
                   <Button onClick={() => setIsAddModalOpen(true)} className="bg-primary text-primary-foreground hover:bg-primary-hover">
                     <Upload className="mr-2 h-4 w-4" />
@@ -905,7 +852,7 @@ export default function Dashboard() {
                     const analysis = analysisByRecordingId.get(recording.id) || null;
                     const ready = analysis?.status?.toLowerCase() === "completed";
                     const displayName = getCallDisplayName(recording.file_name, analysis);
-                    const durationLabel = formatDuration(recording.duration_seconds);
+                    const transcriptWordCount = getTranscriptWordCount(recording.transcript);
 
                     return (
                       <Card key={recording.id} className="border-border">
@@ -923,21 +870,39 @@ export default function Dashboard() {
                                 })}
                               </span>
                               <span>•</span>
-                              <span>Duration: {durationLabel}</span>
+                              <span>Transcript Words: {transcriptWordCount}</span>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2">
                             {getStatusBadge(analysis?.status)}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => ready && handleRecordingClick(analysis)}
-                              disabled={!ready}
-                            >
-                              <Play className="mr-1 h-3.5 w-3.5" />
-                              Analysis
-                            </Button>
+                            {ready ? (
+                              <>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  onClick={() => handleRecordingClick(analysis)}
+                                  title="Open Full Analysis"
+                                  aria-label="Open Full Analysis"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  onClick={() => openOverviewPanel(displayName, analysis)}
+                                  title="Open Overview Panel"
+                                  aria-label="Open Overview Panel"
+                                >
+                                  <PanelRightOpen className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              <Button size="sm" variant="outline" disabled>
+                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                Processing
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"
@@ -1007,69 +972,354 @@ export default function Dashboard() {
           )}
 
           {selectedTab === "reports" && (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Sentiment Distribution</CardTitle>
-                  <CardDescription>Call quality mix across sentiment bands</CardDescription>
+            <>
+              <Card className="border border-slate-200 bg-white shadow-sm">
+                <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <CardTitle className="text-2xl text-slate-900">Call Analysis Report</CardTitle>
+                    <CardDescription className="mt-1">
+                      Professional summary of call analysis performance, issue trends, and outcome distribution.
+                    </CardDescription>
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    Generated: {reportGeneratedAt}
+                  </div>
                 </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie data={sentimentDistribution} dataKey="value" nameKey="name" outerRadius={100}>
-                        {sentimentDistribution.map((entry, index) => (
-                          <Cell key={`sentiment-cell-${index}`} fill={entry.fill} />
+                <CardContent className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                  <div className="overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                          <th className="px-4 py-3 font-medium">Executive Metric</th>
+                          <th className="px-4 py-3 text-right font-medium">Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t">
+                          <td className="px-4 py-3 text-slate-700">Total Calls Uploaded</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{kpis.totalCalls}</td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-4 py-3 text-slate-700">Total Analysis Records</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{overviewInsights.totalCount}</td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-4 py-3 text-slate-700">Completed Analyses</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{overviewInsights.completedCount}</td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-4 py-3 text-slate-700">Completion Rate</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                            {toPercent(overviewInsights.completionRate)}
+                          </td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-4 py-3 text-slate-700">Average Call Quality</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                            {toPercent(overviewInsights.avgQuality)}
+                          </td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-4 py-3 text-slate-700">Average CX Score</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{toPercent(overviewInsights.avgCx)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                          <th className="px-4 py-3 font-medium">Operational Snapshot</th>
+                          <th className="px-4 py-3 text-right font-medium">Count</th>
+                          <th className="px-4 py-3 text-right font-medium">Share</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t">
+                          <td className="px-4 py-3 text-slate-700">Completed</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{analysisStatusTotals.completed}</td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {toRatioPercent(analysisStatusTotals.completed, analysisStatusTotals.total)}
+                          </td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-4 py-3 text-slate-700">Processing</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{analysisStatusTotals.processing}</td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {toRatioPercent(analysisStatusTotals.processing, analysisStatusTotals.total)}
+                          </td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-4 py-3 text-slate-700">Pending</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{analysisStatusTotals.pending}</td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {toRatioPercent(analysisStatusTotals.pending, analysisStatusTotals.total)}
+                          </td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-4 py-3 text-slate-700">Failed</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">{analysisStatusTotals.failed}</td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {toRatioPercent(analysisStatusTotals.failed, analysisStatusTotals.total)}
+                          </td>
+                        </tr>
+                        {overviewInsights.reportMetrics.map((metric) => (
+                          <tr key={metric.metric} className="border-t">
+                            <td className="px-4 py-3 text-slate-700">{metric.metric}</td>
+                            <td className="px-4 py-3 text-right font-semibold text-slate-900">{metric.count}</td>
+                            <td className="px-4 py-3 text-right text-slate-600">{metric.share}</td>
+                          </tr>
                         ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
+                      </tbody>
+                    </table>
+                  </div>
                 </CardContent>
               </Card>
 
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Priority Flag Distribution</CardTitle>
+                    <CardDescription>Based on final_scoring.priority_flag</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <PieChart>
+                        <Pie data={overviewInsights.priorityFlagData} dataKey="value" nameKey="name" outerRadius={90}>
+                          {overviewInsights.priorityFlagData.map((entry, index) => (
+                            <Cell key={`priority-${index}`} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card className="xl:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Top Issue Categories</CardTitle>
+                    <CardDescription>Most frequent primary_issue_category values</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {overviewInsights.topIssueData.length ? (
+                      <ResponsiveContainer width="100%" height={260}>
+                        <BarChart data={overviewInsights.topIssueData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={70} />
+                          <YAxis allowDecimals={false} />
+                          <Tooltip />
+                          <Bar dataKey="count" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No issue classification data available yet.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Call Outcome Distribution</CardTitle>
+                    <CardDescription>Based on call_overview.call_outcome</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {overviewInsights.callOutcomeData.length ? (
+                      <ResponsiveContainer width="100%" height={260}>
+                        <PieChart>
+                          <Pie data={overviewInsights.callOutcomeData} dataKey="value" nameKey="name" outerRadius={90}>
+                            {overviewInsights.callOutcomeData.map((entry, index) => (
+                              <Cell
+                                key={`outcome-${index}`}
+                                fill={["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#14B8A6"][index % 6]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No call outcome data available yet.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Objection Pattern Report</CardTitle>
+                    <CardDescription>Top objection themes from analyzed calls</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <BarChart data={objectionData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="category" />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip />
+                        <Bar dataKey="count" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Issue Category Breakdown</CardTitle>
+                    <CardDescription>Compact table view of issue category spread</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {overviewInsights.issueBreakdown.length ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                          <thead>
+                            <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
+                              <th className="py-2 pr-2 font-medium">Category</th>
+                              <th className="py-2 px-2 font-medium">Calls</th>
+                              <th className="py-2 pl-2 text-right font-medium">Share</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {overviewInsights.issueBreakdown.slice(0, 6).map((row) => (
+                              <tr key={row.name} className="border-b last:border-0">
+                                <td className="py-2 pr-2 text-foreground">{row.name}</td>
+                                <td className="py-2 px-2 text-foreground">{row.count}</td>
+                                <td className="py-2 pl-2 text-right text-muted-foreground">{row.share}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No issue data available yet.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Call Outcome Breakdown</CardTitle>
+                    <CardDescription>Distribution by call_overview.call_outcome</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {overviewInsights.outcomeBreakdown.length ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                          <thead>
+                            <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
+                              <th className="py-2 pr-2 font-medium">Outcome</th>
+                              <th className="py-2 px-2 font-medium">Calls</th>
+                              <th className="py-2 pl-2 text-right font-medium">Share</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {overviewInsights.outcomeBreakdown.slice(0, 6).map((row) => (
+                              <tr key={row.name} className="border-b last:border-0">
+                                <td className="py-2 pr-2 text-foreground">{row.name}</td>
+                                <td className="py-2 px-2 text-foreground">{row.value}</td>
+                                <td className="py-2 pl-2 text-right text-muted-foreground">{row.share}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No call outcome data available yet.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Risk Signal Summary</CardTitle>
+                    <CardDescription>Compact counts and shares across completed analyses</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
+                            <th className="py-2 pr-2 font-medium">Metric</th>
+                            <th className="py-2 px-2 font-medium">Count</th>
+                            <th className="py-2 pl-2 text-right font-medium">Share</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {overviewInsights.reportMetrics.map((metric) => (
+                            <tr key={metric.metric} className="border-b last:border-0">
+                              <td className="py-2 pr-2 text-foreground">{metric.metric}</td>
+                              <td className="py-2 px-2 text-foreground">{metric.count}</td>
+                              <td className="py-2 pl-2 text-right text-muted-foreground">{metric.share}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
               <Card>
                 <CardHeader>
-                  <CardTitle>Analysis Status</CardTitle>
-                  <CardDescription>Processing health across all calls</CardDescription>
+                  <CardTitle>Executive Highlights</CardTitle>
+                  <CardDescription>Key generated insights from the current analysis dataset</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={analysisStatusData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip />
-                      <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                        {analysisStatusData.map((entry, index) => (
-                          <Cell key={`status-cell-${index}`} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                <CardContent className="space-y-3">
+                  {overviewInsights.insightBullets.map((insight, index) => (
+                    <div key={`report-insight-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-sm leading-relaxed text-slate-700">{insight}</p>
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
-
-              <Card className="xl:col-span-2">
-                <CardHeader>
-                  <CardTitle>Objection Pattern Report</CardTitle>
-                  <CardDescription>Top objection themes from analyzed calls</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={objectionData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="category" />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip />
-                      <Bar dataKey="count" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
+            </>
           )}
         </main>
       </div>
+
+      <Sheet
+        open={isOverviewSheetOpen}
+        onOpenChange={(open) => {
+          setIsOverviewSheetOpen(open);
+          if (!open) {
+            setOverviewSheetData(null);
+            setOverviewSheetCallName("");
+          }
+        }}
+      >
+        <SheetContent side="right" className="w-[92vw] overflow-y-auto sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>Call Overview</SheetTitle>
+            <SheetDescription>{overviewSheetCallName || "Selected call"}</SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-4 space-y-3">
+            {overviewSheetData && Object.keys(overviewSheetData).length ? (
+              Object.entries(overviewSheetData).map(([key, value]) => (
+                <div key={key} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{titleize(key)}</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-800">
+                    {value === null || value === undefined || value === ""
+                      ? "Not available"
+                      : Array.isArray(value)
+                        ? value.join(", ")
+                        : typeof value === "object"
+                          ? JSON.stringify(value, null, 2)
+                          : String(value)}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">No call overview data available.</p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <AddRecordingModal open={isAddModalOpen} onOpenChange={setIsAddModalOpen} onRecordingAdded={handleRecordingAdded} />
     </div>
