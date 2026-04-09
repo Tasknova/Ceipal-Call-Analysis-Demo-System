@@ -76,6 +76,26 @@ const sendWebhookInBackground = async (webhookPayload: Record<string, unknown>) 
   }
 };
 
+const getMediaDurationSeconds = (file: File): Promise<number | null> => {
+  return new Promise((resolve) => {
+    const media = document.createElement("video");
+    const objectUrl = URL.createObjectURL(file);
+
+    const cleanup = (duration: number | null) => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(duration);
+    };
+
+    media.preload = "metadata";
+    media.onloadedmetadata = () => {
+      const duration = Number.isFinite(media.duration) && media.duration > 0 ? Math.round(media.duration) : null;
+      cleanup(duration);
+    };
+    media.onerror = () => cleanup(null);
+    media.src = objectUrl;
+  });
+};
+
 export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded }: AddRecordingModalProps) {
   const [inputMode, setInputMode] = useState<"audio" | "transcript">("audio");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -160,8 +180,11 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
     try {
       let storedFileUrl: string | null = null;
       let fileSize: number | null = null;
+      let durationSeconds: number | null = null;
 
       if (inputMode === "audio" && selectedFile) {
+        durationSeconds = await getMediaDurationSeconds(selectedFile);
+
         const ext = selectedFile.name.split(".").pop();
         const storagePath = `${user.id}/${Date.now()}_${fileName.trim()}.${ext}`;
 
@@ -196,6 +219,7 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
           file_name: fileName.trim(),
           file_size: fileSize,
           stored_file_url: storedFileUrl,
+          duration_seconds: durationSeconds,
           transcript: inputMode === "transcript" ? transcript.trim() : null,
           call_date: callDateTime,
         })

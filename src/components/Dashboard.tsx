@@ -19,7 +19,7 @@ import {
 
 import { useToast } from "@/hooks/use-toast";
 import { useAnalysisNotifications } from "@/hooks/useAnalysisNotifications";
-import { Analysis } from "@/lib/supabase";
+import { Analysis, supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,6 +48,49 @@ const getAnalysisBucket = (status: string | null | undefined): Exclude<AnalysisF
 };
 
 const stripFileExtension = (value: string): string => value.replace(/\.[^/.]+$/, "");
+
+const formatDuration = (value: unknown): string => {
+  const seconds = Math.max(0, Math.floor(toNumber(value)));
+  if (!seconds) return "N/A";
+
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+};
+
+const getDurationSortValue = (value: unknown): number => {
+  if (value === null || value === undefined) return -1;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : -1;
+};
+
+const getDurationFromMediaUrl = (url: string): Promise<number | null> => {
+  return new Promise((resolve) => {
+    const media = document.createElement("audio");
+    const timeout = window.setTimeout(() => cleanup(null), 15000);
+
+    const cleanup = (duration: number | null) => {
+      window.clearTimeout(timeout);
+      media.src = "";
+      resolve(duration);
+    };
+
+    media.preload = "metadata";
+    media.crossOrigin = "anonymous";
+    media.onloadedmetadata = () => {
+      const duration = Number.isFinite(media.duration) && media.duration > 0 ? Math.round(media.duration) : null;
+      cleanup(duration);
+    };
+    media.onerror = () => cleanup(null);
+    media.src = url;
+  });
+};
 
 const getCallDisplayName = (fileName: string | null | undefined, analysis: Analysis | null): string => {
   const callId = analysis?.call_overview?.call_id;
@@ -106,6 +149,7 @@ export default function Dashboard() {
   const [callsPage, setCallsPage] = useState(1);
   const [analysisStatusFilter, setAnalysisStatusFilter] = useState<AnalysisFilterStatus>("all");
   const [callSearch, setCallSearch] = useState("");
+  const [isSyncingDurations, setIsSyncingDurations] = useState(false);
 
   const { data: dashboardData, isLoading, error } = useDashboardStats();
   const { data: recordings, isLoading: recordingsLoading } = useRecordings();
@@ -119,7 +163,6 @@ export default function Dashboard() {
   useAnalysisNotifications();
 
   const kpis = dashboardData?.kpiData;
-  const last10CallsSentiment = dashboardData?.last10CallsSentiment || [];
   const objectionData = dashboardData?.objectionData || [];
 
   const sentimentDistribution = useMemo(
@@ -233,13 +276,6 @@ export default function Dashboard() {
       .slice(0, 6)
       .map(([name, value]) => ({ name, value }));
 
-    const riskBreakdownData = [
-      { name: "Compliance Risk", value: riskSignals.complianceRisk, fill: "#F97316" },
-      { name: "Process Failure", value: riskSignals.processFailure, fill: "#F43F5E" },
-      { name: "Escalated", value: riskSignals.escalatedCalls, fill: "#3B82F6" },
-      { name: "High Repeat Risk", value: riskSignals.repeatHighRisk, fill: "#8B5CF6" },
-    ];
-
     const insightBullets = [
       `Completion rate is ${toPercent(completionRate)} across ${totalCount} analysis records.`,
       `Average quality score is ${toPercent(avgQuality)} based on completed calls.`,
@@ -257,10 +293,24 @@ export default function Dashboard() {
       priorityFlagData,
       topIssueData,
       callOutcomeData,
-      riskBreakdownData,
       riskSignals,
       insightBullets,
     };
+  }, [analyses]);
+
+  const analysisScoreTrendData = useMemo(() => {
+    const normalized = (analyses || [])
+      .filter((item) => getAnalysisBucket(item.status) === "completed")
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .slice(-10)
+      .map((item, index) => ({
+        call: `Call ${index + 1}`,
+        quality: toNumber(item.final_scoring?.overall_call_quality_score),
+        customerExperience: toNumber(item.customer_experience?.cx_score),
+        efficiency: toNumber(item.sla_and_efficiency?.handling_efficiency_score),
+      }));
+
+    return normalized;
   }, [analyses]);
 
   const analysisByRecordingId = useMemo(() => {
@@ -292,6 +342,12 @@ export default function Dashboard() {
 
         if (statusOrder[aStatus] !== statusOrder[bStatus]) {
           return statusOrder[aStatus] - statusOrder[bStatus];
+        }
+
+        const aDuration = getDurationSortValue(a.duration_seconds);
+        const bDuration = getDurationSortValue(b.duration_seconds);
+        if (aDuration !== bDuration) {
+          return bDuration - aDuration;
         }
 
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -386,6 +442,54 @@ export default function Dashboard() {
     queryClient.invalidateQueries({ queryKey: ["analyses"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
     toast({ title: "Refreshing", description: "Updating call and analysis data." });
+  };
+
+  const syncMissingDurations = async () => {
+    if (isSyncingDurations) return;
+
+    const missingDurationCalls = (recordings || []).filter(
+      (recording) => getDurationSortValue(recording.duration_seconds) <= 0 && recording.stored_file_url
+    );
+
+    if (!missingDurationCalls.length) {
+      toast({ title: "No Sync Needed", description: "All calls already have duration." });
+      return;
+    }
+
+    setIsSyncingDurations(true);
+    let updatedCount = 0;
+
+    try {
+      for (const recording of missingDurationCalls) {
+        const duration = await getDurationFromMediaUrl(recording.stored_file_url as string);
+        if (!duration) continue;
+
+        const { error: updateError } = await supabase
+          .from("calls")
+          .update({ duration_seconds: duration })
+          .eq("id", recording.id);
+
+        if (!updateError) {
+          updatedCount += 1;
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["recordings"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
+
+      toast({
+        title: "Duration Sync Complete",
+        description: `Updated ${updatedCount} call${updatedCount === 1 ? "" : "s"} with duration metadata.`,
+      });
+    } catch {
+      toast({
+        title: "Duration Sync Failed",
+        description: "Unable to fetch durations from media files.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncingDurations(false);
+    }
   };
 
   const getStatusBadge = (status: string | null | undefined) => {
@@ -563,18 +667,19 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
                 <Card className="xl:col-span-2">
                   <CardHeader>
-                    <CardTitle>Sentiment vs Engagement Trend</CardTitle>
-                    <CardDescription>Last 10 analyzed calls from dashboard aggregates</CardDescription>
+                    <CardTitle>Analysis Score Trend</CardTitle>
+                    <CardDescription>Quality, customer experience, and efficiency across latest analyzed calls</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={last10CallsSentiment}>
+                      <LineChart data={analysisScoreTrendData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="call" />
                         <YAxis domain={[0, 100]} />
                         <Tooltip />
-                        <Line type="monotone" dataKey="sentiment" stroke="hsl(var(--primary))" strokeWidth={3} dot={false} />
-                        <Line type="monotone" dataKey="engagement" stroke="hsl(var(--accent-blue))" strokeWidth={3} dot={false} />
+                        <Line type="monotone" dataKey="quality" stroke="hsl(var(--primary))" strokeWidth={3} dot={false} />
+                        <Line type="monotone" dataKey="customerExperience" stroke="#0EA5E9" strokeWidth={3} dot={false} />
+                        <Line type="monotone" dataKey="efficiency" stroke="#14B8A6" strokeWidth={3} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -620,29 +725,7 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Risk Signal Breakdown</CardTitle>
-                    <CardDescription>Compliance, escalation, and repeat-risk alerts</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <BarChart data={overviewInsights.riskBreakdownData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={70} />
-                        <YAxis allowDecimals={false} />
-                        <Tooltip />
-                        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                          {overviewInsights.riskBreakdownData.map((entry, index) => (
-                            <Cell key={`risk-${index}`} fill={entry.fill} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-
-                <Card>
+                <Card className="xl:col-span-2">
                   <CardHeader>
                     <CardTitle>Top Issue Categories</CardTitle>
                     <CardDescription>Most frequent primary_issue_category values</CardDescription>
@@ -755,6 +838,10 @@ export default function Dashboard() {
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Refresh
                   </Button>
+                  <Button variant="outline" onClick={syncMissingDurations} disabled={isSyncingDurations}>
+                    {isSyncingDurations ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Waves className="mr-2 h-4 w-4" />}
+                    Sync Durations
+                  </Button>
                   <Button onClick={() => setIsAddModalOpen(true)} className="bg-primary text-primary-foreground hover:bg-primary-hover">
                     <Upload className="mr-2 h-4 w-4" />
                     Add Call
@@ -818,21 +905,26 @@ export default function Dashboard() {
                     const analysis = analysisByRecordingId.get(recording.id) || null;
                     const ready = analysis?.status?.toLowerCase() === "completed";
                     const displayName = getCallDisplayName(recording.file_name, analysis);
+                    const durationLabel = formatDuration(recording.duration_seconds);
 
                     return (
                       <Card key={recording.id} className="border-border">
                         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
                           <div className="space-y-1">
                             <p className="font-medium text-foreground">{displayName}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(recording.created_at).toLocaleString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <span>
+                                {new Date(recording.created_at).toLocaleString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                              <span>•</span>
+                              <span>Duration: {durationLabel}</span>
+                            </div>
                           </div>
 
                           <div className="flex items-center gap-2">

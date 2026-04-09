@@ -31,13 +31,6 @@ type AnalysisSectionKey =
   | "evidence"
   | "final_scoring";
 
-type SectionTheme = {
-  icon: React.ComponentType<{ className?: string }>;
-  iconTone: string;
-  cardTone: string;
-  chipTone: string;
-};
-
 const ANALYSIS_SECTIONS: Array<{ key: AnalysisSectionKey; title: string; description: string }> = [
   { key: "call_overview", title: "Call Overview", description: "Primary call context and executive summary." },
   { key: "sla_and_efficiency", title: "SLA and Efficiency", description: "Handling, transfer, and delay indicators." },
@@ -55,99 +48,6 @@ const ANALYSIS_SECTIONS: Array<{ key: AnalysisSectionKey; title: string; descrip
   { key: "evidence", title: "Evidence", description: "Positive and negative extracted evidence." },
   { key: "final_scoring", title: "Final Scoring", description: "Audit verdict and priority outcomes." },
 ];
-
-const SECTION_THEME: Record<AnalysisSectionKey, SectionTheme> = {
-  call_overview: {
-    icon: FileText,
-    iconTone: "border-blue-200 bg-blue-50 text-blue-700",
-    cardTone: "border-blue-100 bg-blue-50/40",
-    chipTone: "border-blue-200 bg-blue-50 text-blue-700",
-  },
-  sla_and_efficiency: {
-    icon: Activity,
-    iconTone: "border-cyan-200 bg-cyan-50 text-cyan-700",
-    cardTone: "border-cyan-100 bg-cyan-50/40",
-    chipTone: "border-cyan-200 bg-cyan-50 text-cyan-700",
-  },
-  resolution_quality: {
-    icon: CheckCircle2,
-    iconTone: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    cardTone: "border-emerald-100 bg-emerald-50/40",
-    chipTone: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  },
-  script_adherence: {
-    icon: BarChart3,
-    iconTone: "border-indigo-200 bg-indigo-50 text-indigo-700",
-    cardTone: "border-indigo-100 bg-indigo-50/40",
-    chipTone: "border-indigo-200 bg-indigo-50 text-indigo-700",
-  },
-  compliance_and_process_risk: {
-    icon: TriangleAlert,
-    iconTone: "border-rose-200 bg-rose-50 text-rose-700",
-    cardTone: "border-rose-100 bg-rose-50/40",
-    chipTone: "border-rose-200 bg-rose-50 text-rose-700",
-  },
-  customer_experience: {
-    icon: Users,
-    iconTone: "border-amber-200 bg-amber-50 text-amber-700",
-    cardTone: "border-amber-100 bg-amber-50/40",
-    chipTone: "border-amber-200 bg-amber-50 text-amber-700",
-  },
-  escalation_analysis: {
-    icon: TriangleAlert,
-    iconTone: "border-orange-200 bg-orange-50 text-orange-700",
-    cardTone: "border-orange-100 bg-orange-50/40",
-    chipTone: "border-orange-200 bg-orange-50 text-orange-700",
-  },
-  issue_classification: {
-    icon: FileText,
-    iconTone: "border-violet-200 bg-violet-50 text-violet-700",
-    cardTone: "border-violet-100 bg-violet-50/40",
-    chipTone: "border-violet-200 bg-violet-50 text-violet-700",
-  },
-  salesforce_tagging_integrity: {
-    icon: BarChart3,
-    iconTone: "border-sky-200 bg-sky-50 text-sky-700",
-    cardTone: "border-sky-100 bg-sky-50/40",
-    chipTone: "border-sky-200 bg-sky-50 text-sky-700",
-  },
-  agent_capability: {
-    icon: Users,
-    iconTone: "border-teal-200 bg-teal-50 text-teal-700",
-    cardTone: "border-teal-100 bg-teal-50/40",
-    chipTone: "border-teal-200 bg-teal-50 text-teal-700",
-  },
-  repeat_contact_risk: {
-    icon: Activity,
-    iconTone: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700",
-    cardTone: "border-fuchsia-100 bg-fuchsia-50/40",
-    chipTone: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700",
-  },
-  business_and_cost_leakage: {
-    icon: BarChart3,
-    iconTone: "border-yellow-200 bg-yellow-50 text-yellow-700",
-    cardTone: "border-yellow-100 bg-yellow-50/40",
-    chipTone: "border-yellow-200 bg-yellow-50 text-yellow-700",
-  },
-  management_value: {
-    icon: Sparkles,
-    iconTone: "border-lime-200 bg-lime-50 text-lime-700",
-    cardTone: "border-lime-100 bg-lime-50/40",
-    chipTone: "border-lime-200 bg-lime-50 text-lime-700",
-  },
-  evidence: {
-    icon: FileText,
-    iconTone: "border-slate-200 bg-slate-50 text-slate-700",
-    cardTone: "border-slate-200 bg-slate-50/60",
-    chipTone: "border-slate-200 bg-slate-50 text-slate-700",
-  },
-  final_scoring: {
-    icon: CheckCircle2,
-    iconTone: "border-green-200 bg-green-50 text-green-700",
-    cardTone: "border-green-100 bg-green-50/40",
-    chipTone: "border-green-200 bg-green-50 text-green-700",
-  },
-};
 
 const isObject = (value: unknown): value is Record<string, JsonValue | undefined> => {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -169,31 +69,6 @@ const titleize = (value: string): string => {
     .replace(/\s+/g, " ")
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
-};
-
-const shortValue = (value: unknown): string => {
-  if (value === null || value === undefined || value === "") return "N/A";
-  const text = typeof value === "string" ? value : String(value);
-  return text.length > 48 ? `${text.slice(0, 48)}...` : text;
-};
-
-const getSectionHighlights = (value: Record<string, JsonValue | undefined> | null | undefined): string[] => {
-  if (!isObject(value)) return [];
-
-  const highlights: string[] = [];
-  for (const [key, fieldValue] of Object.entries(value)) {
-    if (fieldValue === null || fieldValue === undefined || fieldValue === "") continue;
-
-    if (typeof fieldValue === "string" || typeof fieldValue === "number" || typeof fieldValue === "boolean") {
-      highlights.push(`${titleize(key)}: ${shortValue(fieldValue)}`);
-    } else if (Array.isArray(fieldValue) && fieldValue.length) {
-      highlights.push(`${titleize(key)}: ${shortValue(fieldValue[0])}`);
-    }
-
-    if (highlights.length >= 3) break;
-  }
-
-  return highlights;
 };
 
 const statusTone = (status?: string) => {
@@ -302,13 +177,11 @@ function ObjectGrid({ data, depth = 0 }: { data: Record<string, JsonValue | unde
   }
 
   return (
-    <div className={depth === 0 ? "grid gap-3 md:grid-cols-2" : "space-y-2"}>
+    <div className="space-y-2">
       {entries.map(([key, value]) => (
         <div
           key={`${key}-${depth}`}
-          className={`rounded-xl border p-3 transition-colors ${
-            depth > 0 ? "border-slate-200 bg-slate-50" : "border-slate-200 bg-white shadow-sm hover:border-blue-200"
-          }`}
+          className={`rounded-md border border-slate-200 p-3 ${depth > 0 ? "bg-slate-50" : "bg-white/60"}`}
         >
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{titleize(key)}</p>
           <div className="text-sm text-slate-700">
@@ -435,15 +308,11 @@ export default function AnalysisDetail() {
       }
 
       const hasData = isObject(data) && Object.keys(data).length > 0;
-      const fieldCount = isObject(data) ? Object.keys(data).length : 0;
-      const highlights = getSectionHighlights(data);
 
       return {
         ...section,
         data,
         hasData,
-        fieldCount,
-        highlights,
       };
     });
   }, [analysis]);
@@ -647,56 +516,28 @@ export default function AnalysisDetail() {
             <Accordion
               type="multiple"
               defaultValue={filledSections.filter((section) => section.hasData).slice(0, 3).map((section) => section.key)}
-              className="grid grid-cols-1 gap-4 xl:grid-cols-2"
+              className="w-full"
             >
-              {filledSections.map((section) => {
-                const theme = SECTION_THEME[section.key];
-                const Icon = theme.icon;
-
-                return (
-                  <AccordionItem
-                    key={section.key}
-                    value={section.key}
-                    className={`rounded-2xl border shadow-sm transition-all duration-200 hover:shadow-md ${theme.cardTone}`}
-                  >
-                    <AccordionTrigger className="gap-3 px-4 py-4 hover:no-underline">
-                      <div className="flex w-full flex-1 items-start gap-3 text-left">
-                        <span className={`mt-0.5 rounded-lg border p-2 ${theme.iconTone}`}>
-                          <Icon className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-semibold text-foreground">{section.title}</p>
-                            <Badge variant={section.hasData ? "default" : "outline"}>
-                              {section.hasData ? `${section.fieldCount} Fields` : "No Data"}
-                            </Badge>
-                          </div>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{section.description}</p>
-                          {section.highlights.length ? (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {section.highlights.map((highlight, index) => (
-                                <span
-                                  key={`${section.key}-highlight-${index}`}
-                                  className={`rounded-full border px-2 py-1 text-[11px] ${theme.chipTone}`}
-                                >
-                                  {highlight}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
+              {filledSections.map((section) => (
+                <AccordionItem key={section.key} value={section.key}>
+                  <AccordionTrigger className="hover:no-underline">
+                    <div className="flex w-full items-center justify-between pr-3">
+                      <div className="text-left">
+                        <p className="font-medium text-foreground">{section.title}</p>
+                        <p className="text-xs text-muted-foreground">{section.description}</p>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-4 pb-4">
-                      {section.hasData && isObject(section.data) ? (
-                        <ObjectGrid data={section.data} />
-                      ) : (
-                        <p className="text-sm text-muted-foreground">No data available for this section.</p>
-                      )}
-                    </AccordionContent>
-                  </AccordionItem>
-                );
-              })}
+                      <Badge variant={section.hasData ? "default" : "outline"}>{section.hasData ? "Available" : "No Data"}</Badge>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    {section.hasData && isObject(section.data) ? (
+                      <ObjectGrid data={section.data} />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No data available for this section.</p>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
             </Accordion>
           </CardContent>
         </Card>
