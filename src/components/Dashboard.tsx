@@ -3,7 +3,10 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
+  Activity,
+  AlertTriangle,
   BarChart3,
+  CheckCircle2,
   Loader2,
   Phone,
   Play,
@@ -20,10 +23,79 @@ import { Analysis } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAnalyses, useDashboardStats, useDeleteRecording, useRecordings } from "@/hooks/useSupabaseData";
 import AddRecordingModal from "./AddRecordingModal";
 
 type DashboardTab = "overview" | "calls" | "reports";
+type AnalysisFilterStatus = "all" | "completed" | "processing" | "pending" | "failed";
+
+const toNumber = (value: unknown): number => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+};
+
+const toPercent = (value: number): string => `${Math.max(0, value).toFixed(0)}%`;
+
+const getAnalysisBucket = (status: string | null | undefined): Exclude<AnalysisFilterStatus, "all"> => {
+  const normalized = (status || "pending").toLowerCase();
+
+  if (normalized === "completed" || normalized === "analyzed") return "completed";
+  if (["processing", "in_progress", "analyzing", "queued", "transcribing", "transcribed"].includes(normalized)) return "processing";
+  if (["failed", "error", "cancelled"].includes(normalized)) return "failed";
+  return "pending";
+};
+
+const stripFileExtension = (value: string): string => value.replace(/\.[^/.]+$/, "");
+
+const getCallDisplayName = (fileName: string | null | undefined, analysis: Analysis | null): string => {
+  const callId = analysis?.call_overview?.call_id;
+  if (typeof callId === "string" && callId.trim()) {
+    return callId.trim();
+  }
+
+  const fallback = fileName?.trim() || "Unnamed recording";
+  return stripFileExtension(fallback);
+};
+
+function OverviewStatCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  tone,
+}: {
+  title: string;
+  value: string;
+  subtitle: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: "blue" | "green" | "amber" | "rose";
+}) {
+  const toneClasses = {
+    blue: "bg-blue-50 text-blue-700 border-blue-200",
+    green: "bg-green-50 text-green-700 border-green-200",
+    amber: "bg-amber-50 text-amber-700 border-amber-200",
+    rose: "bg-rose-50 text-rose-700 border-rose-200",
+  };
+
+  const Icon = icon;
+
+  return (
+    <Card className="overflow-hidden border shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+      <CardContent className="space-y-3 p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
+          <span className={`rounded-md border p-1.5 ${toneClasses[tone]}`}>
+            <Icon className="h-4 w-4" />
+          </span>
+        </div>
+        <p className="text-2xl font-semibold text-foreground">{value}</p>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Dashboard() {
   const CALLS_PER_PAGE = 10;
@@ -32,6 +104,8 @@ export default function Dashboard() {
   const [selectedTab, setSelectedTab] = useState<DashboardTab>(initialTab);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [callsPage, setCallsPage] = useState(1);
+  const [analysisStatusFilter, setAnalysisStatusFilter] = useState<AnalysisFilterStatus>("all");
+  const [callSearch, setCallSearch] = useState("");
 
   const { data: dashboardData, isLoading, error } = useDashboardStats();
   const { data: recordings, isLoading: recordingsLoading } = useRecordings();
@@ -66,11 +140,8 @@ export default function Dashboard() {
     };
 
     (analyses || []).forEach((analysis) => {
-      const status = (analysis.status || "pending").toLowerCase();
-      if (status === "completed" || status === "analyzed") totals.completed += 1;
-      else if (["processing", "in_progress", "analyzing", "queued", "transcribing", "transcribed"].includes(status)) totals.processing += 1;
-      else if (["failed", "error", "cancelled"].includes(status)) totals.failed += 1;
-      else totals.pending += 1;
+      const statusBucket = getAnalysisBucket(analysis.status);
+      totals[statusBucket] += 1;
     });
 
     return [
@@ -81,12 +152,173 @@ export default function Dashboard() {
     ];
   }, [analyses]);
 
-  const totalCallsPages = Math.max(1, Math.ceil((recordings || []).length / CALLS_PER_PAGE));
+  const overviewInsights = useMemo(() => {
+    const allAnalyses = analyses || [];
+    const completedAnalyses = allAnalyses.filter((item) => getAnalysisBucket(item.status) === "completed");
+
+    const priorityCounts = {
+      green: 0,
+      amber: 0,
+      red: 0,
+      unknown: 0,
+    };
+
+    const riskSignals = {
+      complianceRisk: 0,
+      processFailure: 0,
+      escalatedCalls: 0,
+      repeatHighRisk: 0,
+    };
+
+    const issueMap = new Map<string, number>();
+    const callOutcomeMap = new Map<string, number>();
+
+    let qualitySum = 0;
+    let cxSum = 0;
+    let efficiencySum = 0;
+
+    completedAnalyses.forEach((item) => {
+      qualitySum += toNumber(item.final_scoring?.overall_call_quality_score);
+      cxSum += toNumber(item.customer_experience?.cx_score);
+      efficiencySum += toNumber(item.sla_and_efficiency?.handling_efficiency_score);
+
+      const priority = String(item.final_scoring?.priority_flag || "unknown").toLowerCase();
+      if (priority === "green") priorityCounts.green += 1;
+      else if (priority === "amber" || priority === "yellow") priorityCounts.amber += 1;
+      else if (priority === "red") priorityCounts.red += 1;
+      else priorityCounts.unknown += 1;
+
+      if (String(item.compliance_and_process_risk?.compliance_risk_present || "").toLowerCase() === "yes") {
+        riskSignals.complianceRisk += 1;
+      }
+      if (String(item.compliance_and_process_risk?.process_failure_signal_present || "").toLowerCase() === "yes") {
+        riskSignals.processFailure += 1;
+      }
+      if (String(item.escalation_analysis?.escalated || "").toLowerCase() === "yes") {
+        riskSignals.escalatedCalls += 1;
+      }
+      if (String(item.repeat_contact_risk?.repeat_call_risk || "").toLowerCase() === "high") {
+        riskSignals.repeatHighRisk += 1;
+      }
+
+      const issueCategory = String(item.issue_classification?.primary_issue_category || "Unspecified").trim();
+      issueMap.set(issueCategory, (issueMap.get(issueCategory) || 0) + 1);
+
+      const outcome = String(item.call_overview?.call_outcome || "Unknown").trim();
+      callOutcomeMap.set(outcome, (callOutcomeMap.get(outcome) || 0) + 1);
+    });
+
+    const completedCount = completedAnalyses.length;
+    const totalCount = allAnalyses.length;
+    const completionRate = totalCount ? (completedCount / totalCount) * 100 : 0;
+
+    const avgQuality = completedCount ? qualitySum / completedCount : 0;
+    const avgCx = completedCount ? cxSum / completedCount : 0;
+    const avgEfficiency = completedCount ? efficiencySum / completedCount : 0;
+
+    const priorityFlagData = [
+      { name: "Green", value: priorityCounts.green, fill: "#10B981" },
+      { name: "Amber", value: priorityCounts.amber, fill: "#F59E0B" },
+      { name: "Red", value: priorityCounts.red, fill: "#EF4444" },
+      { name: "Unknown", value: priorityCounts.unknown, fill: "#94A3B8" },
+    ];
+
+    const topIssueData = Array.from(issueMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([name, count]) => ({ name, count }));
+
+    const callOutcomeData = Array.from(callOutcomeMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([name, value]) => ({ name, value }));
+
+    const riskBreakdownData = [
+      { name: "Compliance Risk", value: riskSignals.complianceRisk, fill: "#F97316" },
+      { name: "Process Failure", value: riskSignals.processFailure, fill: "#F43F5E" },
+      { name: "Escalated", value: riskSignals.escalatedCalls, fill: "#3B82F6" },
+      { name: "High Repeat Risk", value: riskSignals.repeatHighRisk, fill: "#8B5CF6" },
+    ];
+
+    const insightBullets = [
+      `Completion rate is ${toPercent(completionRate)} across ${totalCount} analysis records.`,
+      `Average quality score is ${toPercent(avgQuality)} based on completed calls.`,
+      `Top risk signals identified: ${riskSignals.processFailure + riskSignals.complianceRisk + riskSignals.repeatHighRisk}.`,
+      `Escalation observed in ${riskSignals.escalatedCalls} completed calls.`,
+    ];
+
+    return {
+      totalCount,
+      completedCount,
+      completionRate,
+      avgQuality,
+      avgCx,
+      avgEfficiency,
+      priorityFlagData,
+      topIssueData,
+      callOutcomeData,
+      riskBreakdownData,
+      riskSignals,
+      insightBullets,
+    };
+  }, [analyses]);
+
+  const analysisByRecordingId = useMemo(() => {
+    const map = new Map<string, Analysis>();
+    (analyses || []).forEach((analysis) => {
+      if (analysis.recording_id) {
+        map.set(analysis.recording_id, analysis);
+      }
+    });
+    return map;
+  }, [analyses]);
+
+  const filteredSortedRecordings = useMemo(() => {
+    const statusOrder: Record<Exclude<AnalysisFilterStatus, "all">, number> = {
+      completed: 0,
+      processing: 1,
+      pending: 2,
+      failed: 3,
+    };
+
+    const term = callSearch.trim().toLowerCase();
+
+    return [...(recordings || [])]
+      .sort((a, b) => {
+        const aAnalysis = analysisByRecordingId.get(a.id) || null;
+        const bAnalysis = analysisByRecordingId.get(b.id) || null;
+        const aStatus = getAnalysisBucket(aAnalysis?.status);
+        const bStatus = getAnalysisBucket(bAnalysis?.status);
+
+        if (statusOrder[aStatus] !== statusOrder[bStatus]) {
+          return statusOrder[aStatus] - statusOrder[bStatus];
+        }
+
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      })
+      .filter((recording) => {
+        const analysis = analysisByRecordingId.get(recording.id) || null;
+        const statusBucket = getAnalysisBucket(analysis?.status);
+
+        if (analysisStatusFilter !== "all" && statusBucket !== analysisStatusFilter) {
+          return false;
+        }
+
+        if (!term) {
+          return true;
+        }
+
+        const name = getCallDisplayName(recording.file_name, analysis).toLowerCase();
+        return name.includes(term);
+      });
+  }, [recordings, analysisByRecordingId, analysisStatusFilter, callSearch]);
+
+  const totalCallsPages = Math.max(1, Math.ceil(filteredSortedRecordings.length / CALLS_PER_PAGE));
   const paginatedRecordings = useMemo(() => {
     const start = (callsPage - 1) * CALLS_PER_PAGE;
     const end = start + CALLS_PER_PAGE;
-    return (recordings || []).slice(start, end);
-  }, [recordings, callsPage]);
+    return filteredSortedRecordings.slice(start, end);
+  }, [filteredSortedRecordings, callsPage]);
 
   useEffect(() => {
     if (callsPage > totalCallsPages) {
@@ -99,6 +331,12 @@ export default function Dashboard() {
       setCallsPage(1);
     }
   }, [selectedTab]);
+
+  useEffect(() => {
+    if (selectedTab === "calls") {
+      setCallsPage(1);
+    }
+  }, [selectedTab, analysisStatusFilter, callSearch]);
 
   const handleTabChange = (tab: DashboardTab) => {
     setSelectedTab(tab);
@@ -241,48 +479,102 @@ export default function Dashboard() {
         <main className="flex-1 space-y-6">
           {selectedTab === "overview" && (
             <>
+              <Card className="overflow-hidden border-0 bg-gradient-to-r from-blue-600 via-blue-700 to-cyan-700 text-white shadow-lg">
+                <CardContent className="p-6">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-blue-100">Operations Snapshot</p>
+                      <h2 className="mt-1 text-2xl font-semibold">Live Call Quality Intelligence</h2>
+                      <p className="mt-2 text-sm text-blue-100">
+                        Insights are generated from the current analysis table and refreshed in near real-time.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge className="border border-white/30 bg-white/15 text-white">
+                        {overviewInsights.completedCount} Completed Analyses
+                      </Badge>
+                      <Badge className="border border-white/30 bg-white/15 text-white">
+                        {toPercent(overviewInsights.completionRate)} Completion
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Total Calls</CardDescription>
-                    <CardTitle>{kpis.totalCalls}</CardTitle>
-                  </CardHeader>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Avg Sentiment</CardDescription>
-                    <CardTitle>{kpis.avgSentiment.toFixed(0)}%</CardTitle>
-                  </CardHeader>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Avg Engagement</CardDescription>
-                    <CardTitle>{kpis.avgEngagement.toFixed(0)}%</CardTitle>
-                  </CardHeader>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>High Performing Calls</CardDescription>
-                    <CardTitle>{kpis.highPerformingCalls || 0}</CardTitle>
-                  </CardHeader>
-                </Card>
+                <OverviewStatCard
+                  title="Total Calls"
+                  value={String(kpis.totalCalls)}
+                  subtitle="All calls currently in the system"
+                  icon={Phone}
+                  tone="blue"
+                />
+                <OverviewStatCard
+                  title="Avg Sentiment"
+                  value={toPercent(kpis.avgSentiment)}
+                  subtitle="Customer sentiment across analyzed calls"
+                  icon={TrendingUp}
+                  tone="green"
+                />
+                <OverviewStatCard
+                  title="Completion Rate"
+                  value={toPercent(overviewInsights.completionRate)}
+                  subtitle="Completed analyses out of all analysis rows"
+                  icon={CheckCircle2}
+                  tone="green"
+                />
+                <OverviewStatCard
+                  title="Avg Quality"
+                  value={toPercent(overviewInsights.avgQuality)}
+                  subtitle="final_scoring.overall_call_quality_score"
+                  icon={Activity}
+                  tone="blue"
+                />
+                <OverviewStatCard
+                  title="Avg CX"
+                  value={toPercent(overviewInsights.avgCx)}
+                  subtitle="customer_experience.cx_score"
+                  icon={Waves}
+                  tone="blue"
+                />
+                <OverviewStatCard
+                  title="Avg Efficiency"
+                  value={toPercent(overviewInsights.avgEfficiency)}
+                  subtitle="sla_and_efficiency.handling_efficiency_score"
+                  icon={BarChart3}
+                  tone="amber"
+                />
+                <OverviewStatCard
+                  title="Escalated Calls"
+                  value={String(overviewInsights.riskSignals.escalatedCalls)}
+                  subtitle="Calls with escalation_analysis.escalated = yes"
+                  icon={AlertTriangle}
+                  tone="rose"
+                />
+                <OverviewStatCard
+                  title="High Repeat Risk"
+                  value={String(overviewInsights.riskSignals.repeatHighRisk)}
+                  subtitle="repeat_contact_risk.repeat_call_risk = high"
+                  icon={RefreshCw}
+                  tone="rose"
+                />
               </div>
 
-              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                <Card>
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+                <Card className="xl:col-span-2">
                   <CardHeader>
-                    <CardTitle>Recent Call Trend</CardTitle>
-                    <CardDescription>Last 10 calls sentiment and engagement</CardDescription>
+                    <CardTitle>Sentiment vs Engagement Trend</CardTitle>
+                    <CardDescription>Last 10 analyzed calls from dashboard aggregates</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <ResponsiveContainer width="100%" height={280}>
+                    <ResponsiveContainer width="100%" height={300}>
                       <LineChart data={last10CallsSentiment}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="call" />
                         <YAxis domain={[0, 100]} />
                         <Tooltip />
-                        <Line type="monotone" dataKey="sentiment" stroke="hsl(var(--primary))" strokeWidth={3} />
-                        <Line type="monotone" dataKey="engagement" stroke="hsl(var(--accent-blue))" strokeWidth={3} />
+                        <Line type="monotone" dataKey="sentiment" stroke="hsl(var(--primary))" strokeWidth={3} dot={false} />
+                        <Line type="monotone" dataKey="engagement" stroke="hsl(var(--accent-blue))" strokeWidth={3} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -290,37 +582,164 @@ export default function Dashboard() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Recent Calls</CardTitle>
-                    <CardDescription>Open completed call analyses</CardDescription>
+                    <CardTitle>Analysis Status Mix</CardTitle>
+                    <CardDescription>Distribution of analysis processing states</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    {(recordings || []).slice(0, 6).map((recording) => {
-                      const analysis = analyses?.find((a) => a.recording_id === recording.id) || null;
-                      const ready = analysis?.status?.toLowerCase() === "completed";
-
-                      return (
-                        <div
-                          key={recording.id}
-                          className={`flex items-center justify-between rounded-lg border p-3 ${ready ? "cursor-pointer hover:border-primary" : "opacity-70"}`}
-                          onClick={() => ready && handleRecordingClick(analysis)}
-                        >
-                          <div>
-                            <p className="text-sm font-medium text-foreground">{recording.file_name || "Unnamed recording"}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(recording.created_at).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })}
-                            </p>
-                          </div>
-                          {ready ? <Badge className="bg-accent-blue-light text-primary">View</Badge> : getStatusBadge(analysis?.status)}
-                        </div>
-                      );
-                    })}
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie data={analysisStatusData} dataKey="value" nameKey="name" outerRadius={100} innerRadius={55}>
+                          {analysisStatusData.map((entry, index) => (
+                            <Cell key={`status-mix-${index}`} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </CardContent>
                 </Card>
               </div>
+
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Priority Flag Distribution</CardTitle>
+                    <CardDescription>Based on final_scoring.priority_flag</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={280}>
+                      <PieChart>
+                        <Pie data={overviewInsights.priorityFlagData} dataKey="value" nameKey="name" outerRadius={95}>
+                          {overviewInsights.priorityFlagData.map((entry, index) => (
+                            <Cell key={`priority-${index}`} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Risk Signal Breakdown</CardTitle>
+                    <CardDescription>Compliance, escalation, and repeat-risk alerts</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart data={overviewInsights.riskBreakdownData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={70} />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip />
+                        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                          {overviewInsights.riskBreakdownData.map((entry, index) => (
+                            <Cell key={`risk-${index}`} fill={entry.fill} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Top Issue Categories</CardTitle>
+                    <CardDescription>Most frequent primary_issue_category values</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {overviewInsights.topIssueData.length ? (
+                      <ResponsiveContainer width="100%" height={280}>
+                        <BarChart data={overviewInsights.topIssueData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={70} />
+                          <YAxis allowDecimals={false} />
+                          <Tooltip />
+                          <Bar dataKey="count" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No issue classification data available yet.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Call Outcome Distribution</CardTitle>
+                    <CardDescription>Based on call_overview.call_outcome</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {overviewInsights.callOutcomeData.length ? (
+                      <ResponsiveContainer width="100%" height={280}>
+                        <PieChart>
+                          <Pie data={overviewInsights.callOutcomeData} dataKey="value" nameKey="name" outerRadius={95}>
+                            {overviewInsights.callOutcomeData.map((entry, index) => (
+                              <Cell
+                                key={`outcome-${index}`}
+                                fill={["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#14B8A6"][index % 6]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No call outcome data available yet.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Actionable Insights</CardTitle>
+                    <CardDescription>Auto-generated observations from analysis table</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {overviewInsights.insightBullets.map((insight, index) => (
+                      <div key={`insight-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-sm text-slate-700">{insight}</p>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Calls</CardTitle>
+                  <CardDescription>Open completed call analyses quickly from here</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(recordings || []).slice(0, 6).map((recording) => {
+                    const analysis = analyses?.find((a) => a.recording_id === recording.id) || null;
+                    const ready = analysis?.status?.toLowerCase() === "completed";
+                    const displayName = getCallDisplayName(recording.file_name, analysis);
+
+                    return (
+                      <div
+                        key={recording.id}
+                        className={`flex items-center justify-between rounded-lg border p-3 transition-colors ${ready ? "cursor-pointer hover:border-primary" : "opacity-70"}`}
+                        onClick={() => ready && handleRecordingClick(analysis)}
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{displayName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(recording.created_at).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </p>
+                        </div>
+                        {ready ? <Badge className="bg-accent-blue-light text-primary">View</Badge> : getStatusBadge(analysis?.status)}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
             </>
           )}
 
@@ -343,6 +762,43 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              <Card>
+                <CardContent className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_220px_auto] sm:items-center">
+                  <Input
+                    value={callSearch}
+                    onChange={(event) => setCallSearch(event.target.value)}
+                    placeholder="Search by call name"
+                  />
+
+                  <Select
+                    value={analysisStatusFilter}
+                    onValueChange={(value) => setAnalysisStatusFilter(value as AnalysisFilterStatus)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="processing">Processing</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setCallSearch("");
+                      setAnalysisStatusFilter("all");
+                    }}
+                    disabled={!callSearch && analysisStatusFilter === "all"}
+                  >
+                    Clear Filters
+                  </Button>
+                </CardContent>
+              </Card>
+
               {recordingsLoading ? (
                 <Card>
                   <CardContent className="py-10 text-center">
@@ -350,23 +806,24 @@ export default function Dashboard() {
                     <p className="text-sm text-muted-foreground">Loading calls...</p>
                   </CardContent>
                 </Card>
-              ) : !(recordings || []).length ? (
+              ) : !filteredSortedRecordings.length ? (
                 <Card>
                   <CardContent className="py-10 text-center">
-                    <p className="text-sm text-muted-foreground">No calls uploaded yet.</p>
+                    <p className="text-sm text-muted-foreground">No calls match the selected filters.</p>
                   </CardContent>
                 </Card>
               ) : (
                 <div className="space-y-3">
                   {paginatedRecordings.map((recording) => {
-                    const analysis = analyses?.find((a) => a.recording_id === recording.id) || null;
+                    const analysis = analysisByRecordingId.get(recording.id) || null;
                     const ready = analysis?.status?.toLowerCase() === "completed";
+                    const displayName = getCallDisplayName(recording.file_name, analysis);
 
                     return (
                       <Card key={recording.id} className="border-border">
                         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
                           <div className="space-y-1">
-                            <p className="font-medium text-foreground">{recording.file_name || "Unnamed recording"}</p>
+                            <p className="font-medium text-foreground">{displayName}</p>
                             <p className="text-xs text-muted-foreground">
                               {new Date(recording.created_at).toLocaleString("en-US", {
                                 month: "short",
@@ -393,7 +850,7 @@ export default function Dashboard() {
                               size="sm"
                               variant="outline"
                               className="text-rose-600"
-                              onClick={() => handleDeleteRecording(recording.id, recording.file_name || "Unnamed recording")}
+                              onClick={() => handleDeleteRecording(recording.id, displayName)}
                               disabled={deleteRecording.isPending}
                             >
                               <Trash2 className="mr-1 h-3.5 w-3.5" />
@@ -409,7 +866,7 @@ export default function Dashboard() {
                     <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
                       <p className="text-sm text-muted-foreground">
                         Page {callsPage} of {totalCallsPages} • Showing {(callsPage - 1) * CALLS_PER_PAGE + 1}
-                        -{Math.min(callsPage * CALLS_PER_PAGE, (recordings || []).length)} of {(recordings || []).length} calls
+                        -{Math.min(callsPage * CALLS_PER_PAGE, filteredSortedRecordings.length)} of {filteredSortedRecordings.length} calls
                       </p>
 
                       <div className="flex items-center gap-2">
