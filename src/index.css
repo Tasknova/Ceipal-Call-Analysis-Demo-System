@@ -8,83 +8,82 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Ceipal Theme - AI Powered. People Driven. */
-    --background: 0 0% 98%;
-    --foreground: 210 20% 15%;
+    /* Bharat Petroleum theme */
+    --background: 210 40% 98%;
+    --foreground: 214 60% 16%;
 
     --card: 0 0% 100%;
-    --card-foreground: 210 20% 15%;
+    --card-foreground: 214 60% 16%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 210 20% 15%;
+    --popover-foreground: 214 60% 16%;
 
-    /* Primary Blue - trust, reliability, enterprise tech */
-    --primary: 210 90% 48%;
+    /* Primary BP blue */
+    --primary: 213 88% 34%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 210 90% 42%;
+    --primary-hover: 213 88% 28%;
     
-    /* Vibrant Orange - energy, warmth, human touch */
-    --accent-blue: 25 95% 53%;
-    --accent-blue-hover: 25 95% 47%;
-    --accent-blue-light: 25 95% 96%;
+    /* Signature yellow */
+    --accent-blue: 49 98% 54%;
+    --accent-blue-hover: 49 94% 46%;
+    --accent-blue-light: 49 100% 94%;
 
     /* Warm greys - elegant neutrals */
-    --secondary: 0 0% 92%;
-    --secondary-foreground: 0 0% 20%;
+    --secondary: 213 35% 93%;
+    --secondary-foreground: 214 44% 23%;
 
-    --muted: 0 0% 92%;
-    --muted-foreground: 0 0% 45%;
+    --muted: 213 25% 92%;
+    --muted-foreground: 215 18% 38%;
 
-    --accent: 40 35% 55%;
-    --accent-foreground: 0 0% 10%;
+    --accent: 49 98% 54%;
+    --accent-foreground: 214 60% 16%;
 
     /* Subtle success and warning - maintain professionalism */
     --success: 142 50% 40%;
     --success-foreground: 0 0% 98%;
     --success-light: 142 40% 95%;
     
-    --warning: 38 70% 50%;
+    --warning: 49 95% 45%;
     --warning-foreground: 0 0% 10%;
-    --warning-light: 38 70% 95%;
+    --warning-light: 49 95% 92%;
 
     --destructive: 0 65% 50%;
     --destructive-foreground: 0 0% 98%;
     --destructive-light: 0 65% 95%;
 
-    --border: 0 0% 88%;
-    --input: 0 0% 88%;
-    --ring: 40 35% 55%;
+    --border: 214 30% 85%;
+    --input: 214 30% 85%;
+    --ring: 49 98% 54%;
 
     --radius: 0.25rem;
 
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 0 0% 20%;
-    --sidebar-primary: 0 0% 10%;
+    --sidebar-foreground: 214 44% 23%;
+    --sidebar-primary: 213 88% 34%;
     --sidebar-primary-foreground: 0 0% 96%;
-    --sidebar-accent: 0 0% 96%;
-    --sidebar-accent-foreground: 0 0% 10%;
-    --sidebar-border: 0 0% 90%;
-    --sidebar-ring: 40 35% 55%;
+    --sidebar-accent: 49 100% 94%;
+    --sidebar-accent-foreground: 214 60% 16%;
+    --sidebar-border: 214 30% 88%;
+    --sidebar-ring: 49 98% 54%;
   }
 
   .dark {
-    /* Ceipal Dark Mode - modern tech aesthetic */
-    --background: 210 20% 8%;
+    --background: 214 45% 10%;
     --foreground: 0 0% 96%;
 
-    --card: 210 20% 10%;
+    --card: 214 40% 13%;
     --card-foreground: 0 0% 96%;
 
-    --popover: 210 20% 10%;
+    --popover: 214 40% 13%;
     --popover-foreground: 0 0% 96%;
 
-    --primary: 210 90% 55%;
+    --primary: 213 88% 50%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 210 90% 48%;
+    --primary-hover: 213 88% 43%;
 
-    --accent-blue: 25 95% 58%;
-    --accent-blue-hover: 25 95% 52%;
-    --accent-blue-light: 25 95% 15%;
+    --accent-blue: 49 95% 58%;
+    --accent-blue-hover: 49 95% 52%;
+    --accent-blue-light: 49 70% 18%;
 
     --secondary: 0 0% 15%;
     --secondary-foreground: 0 0% 96%;
@@ -92,33 +91,33 @@ All colors MUST be HSL.
     --muted: 0 0% 15%;
     --muted-foreground: 0 0% 60%;
 
-    --accent: 40 40% 60%;
+    --accent: 49 95% 56%;
     --accent-foreground: 0 0% 10%;
 
     --success: 142 50% 45%;
     --success-foreground: 0 0% 98%;
     --success-light: 142 40% 15%;
     
-    --warning: 38 70% 55%;
+    --warning: 49 85% 57%;
     --warning-foreground: 0 0% 10%;
-    --warning-light: 38 70% 15%;
+    --warning-light: 49 70% 15%;
 
     --destructive: 0 65% 55%;
     --destructive-foreground: 0 0% 98%;
     --destructive-light: 0 65% 15%;
 
-    --border: 0 0% 20%;
-    --input: 0 0% 20%;
-    --ring: 40 40% 60%;
+    --border: 214 25% 23%;
+    --input: 214 25% 23%;
+    --ring: 49 95% 56%;
 
-    --sidebar-background: 0 0% 8%;
+    --sidebar-background: 214 45% 10%;
     --sidebar-foreground: 0 0% 80%;
-    --sidebar-primary: 0 0% 96%;
+    --sidebar-primary: 49 95% 56%;
     --sidebar-primary-foreground: 0 0% 10%;
-    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent: 214 28% 17%;
     --sidebar-accent-foreground: 0 0% 96%;
-    --sidebar-border: 0 0% 20%;
-    --sidebar-ring: 40 40% 60%;
+    --sidebar-border: 214 25% 23%;
+    --sidebar-ring: 49 95% 56%;
   }
 }
 
@@ -135,7 +134,7 @@ All colors MUST be HSL.
     line-height: 1.6;
   }
 
-  /* Ceipal Typography - Clean, modern, tech-focused */
+  /* Bharat Petroleum typography */
   h1, h2, h3, h4, h5, h6 {
     font-weight: 600;
     letter-spacing: 0.02em;

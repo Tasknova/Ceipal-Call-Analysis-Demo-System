@@ -16,14 +16,14 @@ export function useAnalysisNotifications() {
       if (!user) return [];
       
       const { data, error } = await supabase
-        .from('analyses')
+        .from('analysis')
         .select(`
           id,
           status,
           sentiments_score,
           engagement_score,
           recording_id,
-          recordings (
+          calls (
             file_name
           )
         `)
@@ -50,7 +50,7 @@ export function useAnalysisNotifications() {
         previousStatus !== 'completed' && 
         analysis.sentiments_score !== null
       ) {
-        const fileName = analysis.recordings?.file_name || 'Recording';
+        const fileName = analysis.calls?.file_name || 'Recording';
         const sentimentScore = (analysis.sentiments_score || 0).toFixed(0);
         const engagementScore = (analysis.engagement_score || 0).toFixed(0);
         

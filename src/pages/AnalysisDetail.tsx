@@ -7,9 +7,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
-import { ArrowLeft, FileText, MessageSquare, Mic, TrendingUp, Users, Target, AlertTriangle, ChevronDown, ChevronRight, Activity, BarChart3, CheckCircle2, XCircle, Brain, UserCheck, ShieldCheck, Clock, Lightbulb, ArrowRight, Quote, ListChecks, AlertCircle, Play, Pause, Volume2, User as UserIcon, SkipForward, SkipBack, VolumeX, Volume1 } from "lucide-react";
+import { ArrowLeft, FileText, MessageSquare, Mic, TrendingUp, Users, Target, AlertTriangle, ChevronDown, ChevronRight, Activity, BarChart3, CheckCircle2, XCircle, Brain, UserCheck, ShieldCheck, Clock, Lightbulb, ArrowRight, Quote, ListChecks, AlertCircle, Play, Pause, Volume2, SkipForward, SkipBack, VolumeX, Volume1 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase, Analysis, Recording, Lead } from "@/lib/supabase";
+import { supabase, Analysis, Recording } from "@/lib/supabase";
 
 export default function AnalysisDetail() {
   const { id } = useParams<{ id: string }>();
@@ -17,7 +17,6 @@ export default function AnalysisDetail() {
   const { user } = useAuth();
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [recording, setRecording] = useState<Recording | null>(null);
-  const [lead, setLead] = useState<Lead | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
@@ -40,7 +39,7 @@ export default function AnalysisDetail() {
       try {
         // Fetch analysis
         const { data: analysisData, error: analysisError } = await supabase
-          .from('analyses')
+          .from('analysis')
           .select('*')
           .eq('id', id)
           .single();
@@ -49,23 +48,12 @@ export default function AnalysisDetail() {
 
         // Fetch recording
         const { data: recordingData, error: recordingError } = await supabase
-          .from('recordings')
+          .from('calls')
           .select('*')
           .eq('id', analysisData.recording_id)
           .single();
 
         if (recordingError) throw recordingError;
-
-        // Fetch lead if associated
-        if (recordingData.lead_id) {
-          const { data: leadData } = await supabase
-            .from('leads')
-            .select('*')
-            .eq('id', recordingData.lead_id)
-            .single();
-          
-          if (leadData) setLead(leadData);
-        }
 
         setAnalysis(analysisData);
         setRecording(recordingData);
@@ -255,14 +243,11 @@ export default function AnalysisDetail() {
                 onClick={() => {
                   const searchParams = new URLSearchParams(window.location.search);
                   const from = searchParams.get('from');
-                  const leadId = searchParams.get('leadId');
                   
                   if (from === 'overview') {
                     navigate('/?view=dashboard&tab=overview');
-                  } else if (from === 'lead' && leadId) {
-                    navigate(`/lead/${leadId}`);
                   } else {
-                    navigate('/?view=dashboard&tab=recordings');
+                    navigate('/?view=dashboard&tab=calls');
                   }
                 }}
                 className="border-slate-300 hover:bg-slate-50"
@@ -271,21 +256,13 @@ export default function AnalysisDetail() {
                 Back
               </Button>
               <Separator orientation="vertical" className="h-8" />
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center">
-                <span className="text-white font-bold text-lg">C</span>
-              </div>
+              <img src="/Bharat-Petroleum-Logo-2.png" alt="BP logo" className="h-10 w-auto" />
               <div>
                 <h1 className="text-xl font-bold text-slate-900">Call Analysis Report</h1>
                 <p className="text-sm text-slate-600 flex items-center gap-2">
                   <Clock className="h-3 w-3" />
                   {recording.file_name || 'Recording'} • {new Date(analysis.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </p>
-                {lead && (
-                  <p className="text-sm text-slate-600 flex items-center gap-2 mt-1">
-                    <UserIcon className="h-3 w-3" />
-                    Lead: <span className="font-medium text-slate-900">{lead.name}</span>
-                  </p>
-                )}
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -456,22 +433,6 @@ export default function AnalysisDetail() {
             </CardContent>
           </Card>
 
-          {/* Lead Type */}
-          {analysis.lead_type && (
-            <Card className="bg-white border-slate-200 hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-4 bg-violet-50 rounded-xl">
-                    <Target className="h-7 w-7 text-violet-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600">Lead Type</p>
-                    <p className="text-lg font-semibold text-slate-900">{analysis.lead_type}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Main Analysis Content */}
@@ -731,116 +692,6 @@ export default function AnalysisDetail() {
               )}
             </div>
 
-            {/* Context and Accuracy Scores */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Company Context Accuracy */}
-              {(analysis.company_accuracy_score !== null || analysis.company_accuracy_reasoning) && (
-                <Card className="bg-white border-slate-200 shadow-md">
-                  <CardHeader className="border-b border-slate-100">
-                    <CardTitle className="flex items-center gap-3 text-lg">
-                      <div className="p-2 bg-cyan-100 rounded-lg">
-                        <ShieldCheck className="h-5 w-5 text-cyan-600" />
-                      </div>
-                      Company Context Accuracy
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-4">
-                    {analysis.company_accuracy_score !== null && (
-                      <div className="flex items-center gap-4">
-                        <div className={`text-3xl font-bold ${getScoreColor(analysis.company_accuracy_score)}`}>
-                          {analysis.company_accuracy_score}%
-                        </div>
-                        <div className="flex-1">
-                          <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full ${getProgressColor(analysis.company_accuracy_score)} transition-all duration-300`}
-                              style={{ width: `${analysis.company_accuracy_score}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {analysis.company_accuracy_reasoning && (
-                      <p className="text-slate-700 leading-relaxed">
-                        {analysis.company_accuracy_reasoning}
-                      </p>
-                    )}
-                    {analysis.ceipal_context_used && (
-                      <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                        <p className="text-sm font-medium text-slate-900 mb-2">Context Used:</p>
-                        <p className="text-sm text-slate-700 leading-relaxed">
-                          {analysis.ceipal_context_used}
-                        </p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Product Context Accuracy */}
-              {(analysis.project_accuracy_score !== null || analysis.project_accuracy_reasoning) && (
-                <Card className="bg-white border-slate-200 shadow-md">
-                  <CardHeader className="border-b border-slate-100">
-                    <CardTitle className="flex items-center gap-3 text-lg">
-                      <div className="p-2 bg-teal-100 rounded-lg">
-                        <Target className="h-5 w-5 text-teal-600" />
-                      </div>
-                      Product Context Accuracy
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-4">
-                    {analysis.project_accuracy_score !== null && (
-                      <div className="flex items-center gap-4">
-                        <div className={`text-3xl font-bold ${getScoreColor(analysis.project_accuracy_score)}`}>
-                          {analysis.project_accuracy_score}%
-                        </div>
-                        <div className="flex-1">
-                          <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full ${getProgressColor(analysis.project_accuracy_score)} transition-all duration-300`}
-                              style={{ width: `${analysis.project_accuracy_score}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {analysis.project_accuracy_reasoning && (
-                      <p className="text-slate-700 leading-relaxed">
-                        {analysis.project_accuracy_reasoning}
-                      </p>
-                    )}
-                    {analysis.project_context_used && (
-                      <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                        <p className="text-sm font-medium text-slate-900 mb-2">Context Used:</p>
-                        <p className="text-sm text-slate-700 leading-relaxed">
-                          {analysis.project_context_used}
-                        </p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            {/* Lead Type Explanation */}
-            {analysis.lead_type_explanation && (
-              <Card className="bg-white border-slate-200 shadow-md">
-                <CardHeader className="border-b border-slate-100">
-                  <CardTitle className="flex items-center gap-3 text-lg">
-                    <div className="p-2 bg-violet-100 rounded-lg">
-                      <Target className="h-5 w-5 text-violet-600" />
-                    </div>
-                    Lead Type Analysis
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <p className="text-slate-700 leading-relaxed">
-                    {analysis.lead_type_explanation}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
             {/* Call Transcript */}
             <Card className="bg-white border-slate-200 shadow-md">
               <CardHeader className="border-b border-slate-100">
@@ -879,12 +730,6 @@ export default function AnalysisDetail() {
             {/* File Info */}
             <div className="text-center space-y-1">
               <p className="font-medium text-slate-900">{recording?.file_name || 'Audio Recording'}</p>
-              {lead && (
-                <p className="text-sm text-slate-600 flex items-center justify-center gap-1">
-                  <UserIcon className="h-3 w-3" />
-                  {lead.name}
-                </p>
-              )}
             </div>
 
             {/* Progress Bar */}

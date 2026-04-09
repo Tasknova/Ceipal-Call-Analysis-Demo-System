@@ -1,236 +1,258 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabase, Recording, Analysis, MetricsAggregate, Lead, LeadGroup } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
-import { useEffect } from 'react'
+import { useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { useAuth } from "@/contexts/AuthContext";
+import { Analysis, Recording, supabase } from "@/lib/supabase";
+
+const toNumber = (value: unknown): number => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+};
+
+const labelToScore = (value: unknown): number => {
+  const label = String(value || "").toLowerCase();
+  if (label === "positive") return 85;
+  if (label === "neutral") return 60;
+  if (label === "negative") return 35;
+  return 0;
+};
+
+const confidenceToScore = (value: unknown): number => {
+  const label = String(value || "").toLowerCase();
+  if (label === "strong") return 9;
+  if (label === "average") return 6;
+  if (label === "weak") return 3;
+  return 0;
+};
 
 export function useRecordings() {
-  const { user } = useAuth()
-  const queryClient = useQueryClient()
-  
-  // Set up real-time subscription
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
   useEffect(() => {
-    if (!user) return
+    if (!user) return;
 
     const channel = supabase
-      .channel('recordings-changes')
+      .channel("calls-changes")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'recordings',
-          filter: `user_id=eq.${user.id}`
+          event: "*",
+          schema: "public",
+          table: "calls",
+          filter: `user_id=eq.${user.id}`,
         },
         () => {
-          // Invalidate and refetch recordings when any change occurs
-          queryClient.invalidateQueries({ queryKey: ['recordings', user.id] })
-          queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] })
+          queryClient.invalidateQueries({ queryKey: ["recordings", user.id] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
         }
       )
-      .subscribe()
+      .subscribe();
 
     return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [user, queryClient])
-  
+      supabase.removeChannel(channel);
+    };
+  }, [user, queryClient]);
+
   return useQuery({
-    queryKey: ['recordings', user?.id],
+    queryKey: ["recordings", user?.id],
     queryFn: async () => {
-      if (!user) throw new Error('User not authenticated')
-      
-      const { data, error } = await supabase
-        .from('recordings')
-        .select(`
-          *,
-          leads (
-            id,
-            name,
-            email
-          )
-        `)
-        .order('created_at', { ascending: false })
-      
-      if (error) throw error
-      return data as Recording[]
+      if (!user) throw new Error("User not authenticated");
+
+      const { data, error } = await supabase.from("calls").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as Recording[];
     },
     enabled: !!user,
-    refetchInterval: 3000, // Poll every 3 seconds for status updates
-    refetchIntervalInBackground: true // Continue polling even when tab is not focused
-  })
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
+  });
 }
 
 export function useAnalyses() {
-  const { user } = useAuth()
-  const queryClient = useQueryClient()
-  
-  // Set up real-time subscription for analyses
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
   useEffect(() => {
-    if (!user) return
+    if (!user) return;
 
     const channel = supabase
-      .channel('analyses-changes')
+      .channel("analysis-changes")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'analyses',
-          filter: `user_id=eq.${user.id}`
+          event: "*",
+          schema: "public",
+          table: "analysis",
+          filter: `user_id=eq.${user.id}`,
         },
         () => {
-          // Invalidate and refetch analyses when any change occurs
-          queryClient.invalidateQueries({ queryKey: ['analyses', user.id] })
-          // Also invalidate recordings since they show analysis status
-          queryClient.invalidateQueries({ queryKey: ['recordings', user.id] })
-          // Also invalidate dashboard stats
-          queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] })
+          queryClient.invalidateQueries({ queryKey: ["analyses", user.id] });
+          queryClient.invalidateQueries({ queryKey: ["recordings", user.id] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
         }
       )
-      .subscribe()
+      .subscribe();
 
     return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [user, queryClient])
-  
+      supabase.removeChannel(channel);
+    };
+  }, [user, queryClient]);
+
   return useQuery({
-    queryKey: ['analyses', user?.id],
+    queryKey: ["analyses", user?.id],
     queryFn: async () => {
-      if (!user) throw new Error('User not authenticated')
-      
+      if (!user) throw new Error("User not authenticated");
+
       const { data, error } = await supabase
-        .from('analyses')
-        .select(`
-          *,
-          recordings (
-            file_name,
-            duration_seconds,
-            created_at,
-            lead_id,
-            leads (
-              id,
-              name
+        .from("analysis")
+        .select(
+          `
+            *,
+            calls (
+              file_name,
+              duration_seconds,
+              created_at
             )
-          )
-        `)
-        .order('created_at', { ascending: false })
-      
-      if (error) throw error
-      return data as (Analysis & { recordings: Recording })[]
+          `
+        )
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return data as (Analysis & { calls: Recording })[];
     },
     enabled: !!user,
-    refetchInterval: 3000, // Poll every 3 seconds for status updates
-    refetchIntervalInBackground: true // Continue polling even when tab is not focused
-  })
-}
-
-export function useMetricsAggregates() {
-  const { user } = useAuth()
-  
-  return useQuery({
-    queryKey: ['metrics_aggregates', user?.id],
-    queryFn: async () => {
-      if (!user) throw new Error('User not authenticated')
-      
-      const { data, error } = await supabase
-        .from('metrics_aggregates')
-        .select('*')
-        .order('date', { ascending: false })
-      
-      if (error) throw error
-      return data as MetricsAggregate[]
-    },
-    enabled: !!user
-  })
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
+  });
 }
 
 export function useDashboardStats() {
-  const { data: recordings } = useRecordings()
-  const { data: analyses } = useAnalyses()
-  const { data: metrics } = useMetricsAggregates()
+  const { data: recordings } = useRecordings();
+  const { data: analyses } = useAnalyses();
 
   return useQuery({
-    queryKey: ['dashboard_stats', recordings, analyses, metrics],
+    queryKey: ["dashboard_stats", recordings, analyses],
     queryFn: () => {
-      if (!recordings || !analyses || !metrics) return null
+      if (!recordings || !analyses) return null;
 
-      // Calculate KPIs
-      const totalCalls = recordings.length
-      const avgSentiment = analyses.reduce((sum, a) => sum + (a.sentiments_score || 0), 0) / analyses.length
-      const avgEngagement = analyses.reduce((sum, a) => sum + (a.engagement_score || 0), 0) / analyses.length
-      const avgConfidenceExecutive = analyses.reduce((sum, a) => sum + (a.confidence_score_executive || 0), 0) / analyses.length
-      const avgConfidencePerson = analyses.reduce((sum, a) => sum + (a.confidence_score_person || 0), 0) / analyses.length
-      const totalObjectionsHandled = analyses.filter(a => a.objections_handeled && a.objections_handeled !== 'None - customer was receptive and interested' && a.objections_handeled !== 'None - strong alignment with growth challenges' && a.objections_handeled !== 'None - enterprise client was highly engaged throughout').length
-      const successfulOutcomes = analyses.filter(a => a.call_outcome && !['Trial Setup', 'Awaiting Decision'].includes(a.call_outcome)).length
-      
-      // Additional KPIs
-      const highPerformingCalls = analyses.filter(a => (a.sentiments_score || 0) >= 80 && (a.engagement_score || 0) >= 75).length
-      const callsWithNextSteps = analyses.filter(a => a.next_steps && a.next_steps !== 'TBD' && a.next_steps.trim().length > 10).length
-      
-      // Calculate objection statistics from analysis data
-      const totalObjectionsRaised = analyses.reduce((sum, a) => sum + (a.no_of_objections_detected || 0), 0)
-      const totalObjectionsTackled = analyses.reduce((sum, a) => sum + (a.no_of_objections_handeled || 0), 0)
-      const objectionSuccessRate = totalObjectionsRaised > 0 ? (totalObjectionsTackled / totalObjectionsRaised) * 100 : 0
+      const normalized = analyses.map((analysis) => {
+        const qualityScore = toNumber(analysis.final_scoring?.overall_call_quality_score);
+        const cxScore = toNumber(analysis.customer_experience?.cx_score) || labelToScore(analysis.customer_experience?.closing_customer_sentiment);
+        const efficiencyScore = toNumber(analysis.sla_and_efficiency?.handling_efficiency_score);
+        const resolutionScore = toNumber(analysis.resolution_quality?.resolution_quality_score);
+        const capabilityScore = toNumber(analysis.agent_capability?.agent_capability_score);
+        const engagementScore =
+          (efficiencyScore + resolutionScore + capabilityScore) /
+          [efficiencyScore, resolutionScore, capabilityScore].filter((v) => v > 0).length ||
+          0;
 
-      // Lead Type Statistics
-      const hotLeads = analyses.filter(a => a.lead_type?.toLowerCase().includes('hot')).length
-      const warmLeads = analyses.filter(a => a.lead_type?.toLowerCase().includes('warm')).length
-      const coldLeads = analyses.filter(a => a.lead_type?.toLowerCase().includes('cold')).length
+        const confidenceExecutive = confidenceToScore(analysis.agent_capability?.confidence_level);
+        const confidencePerson = confidenceToScore(analysis.agent_capability?.communication_clarity);
+        const processFailure = String(analysis.compliance_and_process_risk?.process_failure_signal_present || "").toLowerCase() === "yes";
+        const escalation = String(analysis.escalation_analysis?.escalated || "").toLowerCase() === "yes";
+        const repeatRisk = String(analysis.repeat_contact_risk?.repeat_call_risk || "").toLowerCase();
 
-      // Sentiment distribution - 5 categories
+        return {
+          ...analysis,
+          qualityScore,
+          sentimentScore: cxScore,
+          engagementScore,
+          confidenceExecutive,
+          confidencePerson,
+          objectionsRaised: processFailure || escalation || repeatRisk === "high" ? 1 : 0,
+          objectionsHandled: qualityScore >= 70 ? 1 : 0,
+        };
+      });
+
+      const totalCalls = recordings.length;
+      const avgSentiment = normalized.reduce((sum, a) => sum + a.sentimentScore, 0) / (normalized.length || 1);
+      const avgEngagement = normalized.reduce((sum, a) => sum + a.engagementScore, 0) / (normalized.length || 1);
+      const avgConfidenceExecutive = normalized.reduce((sum, a) => sum + a.confidenceExecutive, 0) / (normalized.length || 1);
+      const avgConfidencePerson = normalized.reduce((sum, a) => sum + a.confidencePerson, 0) / (normalized.length || 1);
+
+      const totalObjectionsRaised = normalized.reduce((sum, a) => sum + a.objectionsRaised, 0);
+      const totalObjectionsTackled = normalized.reduce((sum, a) => sum + a.objectionsHandled, 0);
+      const objectionSuccessRate = totalObjectionsRaised > 0 ? (totalObjectionsTackled / totalObjectionsRaised) * 100 : 0;
+
+      const highPerformingCalls = normalized.filter((a) => a.qualityScore >= 80).length;
+      const callsWithNextSteps = normalized.filter(
+        (a) => String(a.call_overview?.call_summary?.call_outcome || "").trim().length > 0
+      ).length;
+
       const sentimentData = [
-        { 
-          name: 'Perfect', 
-          value: analyses.filter(a => (a.sentiments_score || 0) >= 90).length,
-          color: '#10B981' // Emerald green for perfect
-        },
-        { 
-          name: 'Excellent', 
-          value: analyses.filter(a => (a.sentiments_score || 0) >= 80 && (a.sentiments_score || 0) < 90).length,
-          color: '#059669' // Dark green for excellent
-        },
-        { 
-          name: 'Good', 
-          value: analyses.filter(a => (a.sentiments_score || 0) >= 70 && (a.sentiments_score || 0) < 80).length,
-          color: 'hsl(var(--accent-blue))' // Blue for good
-        },
-        { 
-          name: 'Neutral', 
-          value: analyses.filter(a => (a.sentiments_score || 0) >= 50 && (a.sentiments_score || 0) < 70).length,
-          color: '#F59E0B' // Amber for neutral
-        },
-        { 
-          name: 'Negative', 
-          value: analyses.filter(a => (a.sentiments_score || 0) < 50).length,
-          color: '#EF4444' // Red for negative
-        }
-      ]
+        { name: "Perfect", value: normalized.filter((a) => a.sentimentScore >= 90).length, color: "#10B981" },
+        { name: "Excellent", value: normalized.filter((a) => a.sentimentScore >= 80 && a.sentimentScore < 90).length, color: "#059669" },
+        { name: "Good", value: normalized.filter((a) => a.sentimentScore >= 70 && a.sentimentScore < 80).length, color: "hsl(var(--accent-blue))" },
+        { name: "Neutral", value: normalized.filter((a) => a.sentimentScore >= 50 && a.sentimentScore < 70).length, color: "#F59E0B" },
+        { name: "Negative", value: normalized.filter((a) => a.sentimentScore < 50).length, color: "#EF4444" },
+      ];
 
-      // Trend data from metrics
-      const trendData = metrics.slice(-7).map(m => ({
-        date: new Date(m.date).toLocaleDateString('en-US', { weekday: 'short' }),
-        sentiment: m.avg_sentiment || 0,
-        engagement: m.avg_engagement || 0
-      }))
+      const trendData = normalized.slice(-7).map((a) => ({
+        date: new Date(a.created_at).toLocaleDateString("en-US", { weekday: "short" }),
+        sentiment: Math.round(a.sentimentScore),
+        engagement: Math.round(a.engagementScore),
+      }));
 
-      // Engagement levels - 5 categories
       const engagementData = [
-        { level: 'Perfect', count: analyses.filter(a => (a.engagement_score || 0) >= 90).length, fill: '#10B981' },
-        { level: 'Excellent', count: analyses.filter(a => (a.engagement_score || 0) >= 80 && (a.engagement_score || 0) < 90).length, fill: '#059669' },
-        { level: 'Good', count: analyses.filter(a => (a.engagement_score || 0) >= 70 && (a.engagement_score || 0) < 80).length, fill: 'hsl(var(--accent-blue))' },
-        { level: 'Neutral', count: analyses.filter(a => (a.engagement_score || 0) >= 50 && (a.engagement_score || 0) < 70).length, fill: '#F59E0B' },
-        { level: 'Negative', count: analyses.filter(a => (a.engagement_score || 0) < 50).length, fill: '#EF4444' }
-      ]
+        { level: "Perfect", count: normalized.filter((a) => a.engagementScore >= 90).length, fill: "#10B981" },
+        { level: "Excellent", count: normalized.filter((a) => a.engagementScore >= 80 && a.engagementScore < 90).length, fill: "#059669" },
+        { level: "Good", count: normalized.filter((a) => a.engagementScore >= 70 && a.engagementScore < 80).length, fill: "hsl(var(--accent-blue))" },
+        { level: "Neutral", count: normalized.filter((a) => a.engagementScore >= 50 && a.engagementScore < 70).length, fill: "#F59E0B" },
+        { level: "Negative", count: normalized.filter((a) => a.engagementScore < 50).length, fill: "#EF4444" },
+      ];
 
-      // Objection handling analysis
       const objectionData = [
-        { category: 'Budget/Price', count: analyses.filter(a => a.objections_handeled?.toLowerCase().includes('budget') || a.objections_handeled?.toLowerCase().includes('price')).length },
-        { category: 'Timeline', count: analyses.filter(a => a.objections_handeled?.toLowerCase().includes('timeline')).length },
-        { category: 'Authority', count: analyses.filter(a => a.objections_handeled?.toLowerCase().includes('authority') || a.objections_handeled?.toLowerCase().includes('decision')).length },
-        { category: 'Competition', count: analyses.filter(a => a.objections_handeled?.toLowerCase().includes('competition') || a.objections_handeled?.toLowerCase().includes('competitor')).length },
-        { category: 'None', count: analyses.filter(a => a.objections_handeled?.toLowerCase().includes('none')).length }
-      ]
+        { category: "Escalation", count: normalized.filter((a) => String(a.escalation_analysis?.escalated || "").toLowerCase() === "yes").length },
+        { category: "Compliance", count: normalized.filter((a) => String(a.compliance_and_process_risk?.compliance_risk_present || "").toLowerCase() === "yes").length },
+        { category: "Process Failure", count: normalized.filter((a) => String(a.compliance_and_process_risk?.process_failure_signal_present || "").toLowerCase() === "yes").length },
+        { category: "Repeat Risk", count: normalized.filter((a) => ["medium", "high"].includes(String(a.repeat_contact_risk?.repeat_call_risk || "").toLowerCase())).length },
+        { category: "Customer Effort", count: normalized.filter((a) => ["medium", "high"].includes(String(a.customer_experience?.customer_effort_risk || "").toLowerCase())).length },
+      ];
+
+      const last10CallsSentiment = normalized.slice(0, 10).reverse().map((analysis, index) => ({
+        call: `Call ${index + 1}`,
+        callName: analysis.calls?.file_name?.replace(".mp3", "") || `Call ${index + 1}`,
+        sentiment: Math.round(analysis.sentimentScore),
+        engagement: Math.round(analysis.engagementScore),
+        date: new Date(analysis.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      }));
+
+      const last10CallsConfidence = normalized.slice(0, 10).reverse().map((analysis, index) => ({
+        call: `Call ${index + 1}`,
+        callName: analysis.calls?.file_name?.replace(".mp3", "").substring(0, 8) || `Call ${index + 1}`,
+        executive: analysis.confidenceExecutive,
+        person: analysis.confidencePerson,
+        date: new Date(analysis.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      }));
+
+      const last10CallsObjections = normalized.slice(0, 10).reverse().map((analysis, index) => ({
+        call: `Call ${index + 1}`,
+        callName: analysis.calls?.file_name?.replace(".mp3", "").substring(0, 8) || `Call ${index + 1}`,
+        raised: analysis.objectionsRaised,
+        tackled: analysis.objectionsHandled,
+        date: new Date(analysis.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      }));
+
+      const recentCalls = normalized.slice(0, 4).map((analysis, index) => ({
+        id: analysis.id,
+        name: analysis.calls?.file_name?.replace(".mp3", "") || `Call ${index + 1}`,
+        date: new Date(analysis.created_at).toLocaleDateString(),
+        duration: analysis.calls?.duration_seconds
+          ? `${Math.floor(analysis.calls.duration_seconds / 60)}:${(analysis.calls.duration_seconds % 60)
+              .toString()
+              .padStart(2, "0")}`
+          : "N/A",
+        sentiment: Math.round(analysis.sentimentScore),
+        engagement: Math.round(analysis.engagementScore),
+        confidenceExecutive: analysis.confidenceExecutive,
+        confidencePerson: analysis.confidencePerson,
+        status: analysis.status || "unknown",
+        objections: analysis.objectionsRaised > 0 ? "Detected" : "None",
+        nextSteps: String(analysis.call_overview?.call_summary?.call_outcome || "TBD"),
+        improvements: String(analysis.management_value?.leadership_visibility_value || "N/A"),
+        callOutcome: String(analysis.call_overview?.call_summary?.call_outcome || "Unknown"),
+      }));
 
       return {
         kpiData: {
@@ -239,337 +261,54 @@ export function useDashboardStats() {
           avgEngagement,
           avgConfidenceExecutive,
           avgConfidencePerson,
-          objectionsHandled: totalObjectionsHandled,
+          objectionsHandled: totalObjectionsTackled,
           highPerformingCalls,
           callsWithNextSteps,
           totalObjectionsRaised,
           totalObjectionsTackled,
           objectionSuccessRate,
-          hotLeads,
-          warmLeads,
-          coldLeads
+          hotLeads: 0,
+          warmLeads: 0,
+          coldLeads: 0,
         },
         sentimentData,
         trendData,
         engagementData,
         objectionData,
-        
-        // Last 10 calls sentiment trend data for line chart
-        last10CallsSentiment: analyses.slice(0, 10).reverse().map((analysis, index) => ({
-          call: `Call ${index + 1}`,
-          callName: analysis.recordings?.file_name?.replace('.mp3', '').replace('.wav', '').replace('.m4a', '') || `Call ${index + 1}`,
-          sentiment: Math.round(analysis.sentiments_score || 0),
-          engagement: Math.round(analysis.engagement_score || 0),
-          date: new Date(analysis.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        })),
-        
-        // Last 10 calls confidence data for bar chart
-        last10CallsConfidence: analyses.slice(0, 10).reverse().map((analysis, index) => ({
-          call: `Call ${index + 1}`,
-          callName: analysis.recordings?.file_name?.replace('.mp3', '').substring(0, 8) || `Call ${index + 1}`,
-          executive: analysis.confidence_score_executive || 0,
-          person: analysis.confidence_score_person || 0,
-          date: new Date(analysis.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        })),
-        
-        // Last 10 calls objections data for visualization
-        last10CallsObjections: analyses.slice(0, 10).reverse().map((analysis, index) => ({
-          call: `Call ${index + 1}`,
-          callName: analysis.recordings?.file_name?.replace('.mp3', '').substring(0, 8) || `Call ${index + 1}`,
-          raised: 0,
-          tackled: 0,
-          date: new Date(analysis.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        })),
-        
-        recentCalls: analyses.slice(0, 4).map((analysis, index) => ({
-          id: analysis.id,
-          name: analysis.recordings?.file_name?.replace('.mp3', '') || `Call ${index + 1}`,
-          date: new Date(analysis.created_at).toLocaleDateString(),
-          duration: analysis.recordings?.duration_seconds ? 
-            `${Math.floor(analysis.recordings.duration_seconds / 60)}:${(analysis.recordings.duration_seconds % 60).toString().padStart(2, '0')}` : 
-            (analysis.recordings?.leads?.name || 'N/A'),
-          sentiment: analysis.sentiments_score || 0,
-          engagement: analysis.engagement_score || 0,
-          confidenceExecutive: analysis.confidence_score_executive || 0,
-          confidencePerson: analysis.confidence_score_person || 0,
-          status: 'completed',
-          objections: analysis.objections_handeled || 'None',
-          nextSteps: analysis.next_steps || 'TBD',
-          improvements: analysis.improvements || 'None',
-          callOutcome: analysis.call_outcome || 'Unknown'
-        }))
-      }
+        last10CallsSentiment,
+        last10CallsConfidence,
+        last10CallsObjections,
+        recentCalls,
+      };
     },
-    enabled: !!recordings && !!analyses && !!metrics
-  })
+    enabled: !!recordings && !!analyses,
+  });
 }
 
 export function useDeleteRecording() {
-  const queryClient = useQueryClient()
-  const { user } = useAuth()
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (recordingId: string) => {
-      if (!user) throw new Error('User not authenticated')
-      
-      // First, delete all related analyses
-      const { error: analysisError } = await supabase
-        .from('analyses')
-        .delete()
-        .eq('recording_id', recordingId)
-      
+      if (!user) throw new Error("User not authenticated");
+
+      const { error: analysisError } = await supabase.from("analysis").delete().eq("recording_id", recordingId);
       if (analysisError) {
-        console.error('Error deleting analyses:', analysisError)
-        // Continue anyway - the recording might not have analyses
+        console.error("Error deleting analyses:", analysisError);
       }
-      
-      // Then delete the recording
-      const { error } = await supabase
-        .from('recordings')
-        .delete()
-        .eq('id', recordingId)
-      
-      if (error) throw error
-      return recordingId
+
+      const { error } = await supabase.from("calls").delete().eq("id", recordingId);
+      if (error) throw error;
+      return recordingId;
     },
     onSuccess: () => {
-      // Invalidate and refetch all related queries
-      queryClient.invalidateQueries({ queryKey: ['recordings'] })
-      queryClient.invalidateQueries({ queryKey: ['analyses'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard_stats'] })
-      queryClient.invalidateQueries({ queryKey: ['metrics_aggregates'] })
+      queryClient.invalidateQueries({ queryKey: ["recordings"] });
+      queryClient.invalidateQueries({ queryKey: ["analyses"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
     },
     onError: (error) => {
-      console.error('Failed to delete recording:', error)
-    }
-  })
-}
-
-// Lead Groups Hooks
-export function useLeadGroups() {
-  const { user } = useAuth()
-  
-  return useQuery({
-    queryKey: ['lead_groups', user?.id],
-    queryFn: async () => {
-      if (!user) throw new Error('User not authenticated')
-      
-      const { data, error } = await supabase
-        .from('lead_groups')
-        .select('*')
-        .order('created_at', { ascending: false })
-      
-      if (error) throw error
-      return data as LeadGroup[]
+      console.error("Failed to delete recording:", error);
     },
-    enabled: !!user
-  })
-}
-
-export function useCreateLeadGroup() {
-  const queryClient = useQueryClient()
-  const { user } = useAuth()
-  
-  return useMutation({
-    mutationFn: async (groupData: { group_name: string }) => {
-      if (!user) throw new Error('User not authenticated')
-      
-      const { data, error } = await supabase
-        .from('lead_groups')
-        .insert([{ ...groupData, user_id: user.id }])
-        .select()
-        .single()
-      
-      if (error) throw error
-      return data as LeadGroup
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lead_groups'] })
-    }
-  })
-}
-
-export function useUpdateLeadGroup() {
-  const queryClient = useQueryClient()
-  
-  return useMutation({
-    mutationFn: async ({ id, group_name }: { id: string; group_name: string }) => {
-      const { data, error } = await supabase
-        .from('lead_groups')
-        .update({ group_name })
-        .eq('id', id)
-        .select()
-        .single()
-      
-      if (error) throw error
-      return data as LeadGroup
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lead_groups'] })
-      queryClient.invalidateQueries({ queryKey: ['leads'] })
-    }
-  })
-}
-
-export function useDeleteLeadGroup() {
-  const queryClient = useQueryClient()
-  
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('lead_groups')
-        .delete()
-        .eq('id', id)
-      
-      if (error) throw error
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lead_groups'] })
-      queryClient.invalidateQueries({ queryKey: ['leads'] })
-    }
-  })
-}
-
-// Leads Hooks
-export function useLeads(groupId?: string) {
-  const { user } = useAuth()
-  
-  return useQuery({
-    queryKey: ['leads', user?.id, groupId],
-    queryFn: async () => {
-      if (!user) throw new Error('User not authenticated')
-      
-      let query = supabase
-        .from('leads')
-        .select(`
-          *,
-          lead_groups (
-            id,
-            group_name
-          )
-        `)
-        .order('created_at', { ascending: false })
-      
-      if (groupId) {
-        query = query.eq('group_id', groupId)
-      }
-      
-      const { data, error } = await query
-      
-      if (error) throw error
-      return data as Lead[]
-    },
-    enabled: !!user
-  })
-}
-
-export function useCreateLead() {
-  const queryClient = useQueryClient()
-  const { user } = useAuth()
-  
-  return useMutation({
-    mutationFn: async (leadData: { 
-      name: string; 
-      email: string; 
-      contact: string; 
-      description?: string; 
-      other?: any; 
-      group_id?: string 
-    }) => {
-      if (!user) throw new Error('User not authenticated')
-      
-      const { data, error } = await supabase
-        .from('leads')
-        .insert([{ ...leadData, user_id: user.id }])
-        .select()
-        .single()
-      
-      if (error) throw error
-      return data as Lead
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] })
-    }
-  })
-}
-
-export function useUpdateLead() {
-  const queryClient = useQueryClient()
-  
-  return useMutation({
-    mutationFn: async ({ 
-      id, 
-      ...updateData 
-    }: { 
-      id: string; 
-      name?: string; 
-      email?: string; 
-      contact?: string; 
-      description?: string; 
-      other?: any; 
-      group_id?: string 
-    }) => {
-      const { data, error } = await supabase
-        .from('leads')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single()
-      
-      if (error) throw error
-      return data as Lead
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] })
-    }
-  })
-}
-
-export function useDeleteLead() {
-  const queryClient = useQueryClient()
-  
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('leads')
-        .delete()
-        .eq('id', id)
-      
-      if (error) throw error
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] })
-    }
-  })
-}
-
-export function useBulkCreateLeads() {
-  const queryClient = useQueryClient()
-  const { user } = useAuth()
-  
-  return useMutation({
-    mutationFn: async (leadsData: Array<{ 
-      name: string; 
-      email: string; 
-      contact: string; 
-      description?: string; 
-      other?: any; 
-      group_id?: string 
-    }>) => {
-      if (!user) throw new Error('User not authenticated')
-      
-      const leadsWithUserId = leadsData.map(lead => ({ ...lead, user_id: user.id }))
-      
-      const { data, error } = await supabase
-        .from('leads')
-        .insert(leadsWithUserId)
-        .select()
-      
-      if (error) throw error
-      return data as Lead[]
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] })
-    }
-  })
+  });
 }
