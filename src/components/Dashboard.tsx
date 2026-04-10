@@ -20,7 +20,7 @@ import {
 
 import { useToast } from "@/hooks/use-toast";
 import { useAnalysisNotifications } from "@/hooks/useAnalysisNotifications";
-import { Analysis } from "@/lib/supabase";
+import { Analysis, Recording } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +32,8 @@ import AddRecordingModal from "./AddRecordingModal";
 
 type DashboardTab = "overview" | "calls" | "reports";
 type AnalysisFilterStatus = "all" | "completed" | "processing" | "pending" | "failed";
+const PINNED_CALLS_STORAGE_KEY = "dashboard_pinned_call_ids";
+const MAX_PINNED_CALLS = 25;
 
 const toNumber = (value: unknown): number => {
   const num = Number(value);
@@ -129,6 +131,21 @@ export default function Dashboard() {
   const [callsPage, setCallsPage] = useState(1);
   const [analysisStatusFilter, setAnalysisStatusFilter] = useState<AnalysisFilterStatus>("all");
   const [callSearch, setCallSearch] = useState("");
+  const [pinnedCallIds, setPinnedCallIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+
+    try {
+      const raw = window.localStorage.getItem(PINNED_CALLS_STORAGE_KEY);
+      if (!raw) return [];
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed.filter((id): id is string => typeof id === "string");
+    } catch {
+      return [];
+    }
+  });
   const [isOverviewSheetOpen, setIsOverviewSheetOpen] = useState(false);
   const [overviewSheetCallName, setOverviewSheetCallName] = useState("");
   const [overviewSheetData, setOverviewSheetData] = useState<Record<string, unknown> | null>(null);
@@ -384,7 +401,8 @@ export default function Dashboard() {
   const analysisByRecordingId = useMemo(() => {
     const map = new Map<string, Analysis>();
     (analyses || []).forEach((analysis) => {
-      if (analysis.recording_id) {
+      // useAnalyses is sorted newest-first; keep the first row per recording_id
+      if (analysis.recording_id && !map.has(analysis.recording_id)) {
         map.set(analysis.recording_id, analysis);
       }
     });
@@ -402,24 +420,6 @@ export default function Dashboard() {
     const term = callSearch.trim().toLowerCase();
 
     return [...(recordings || [])]
-      .sort((a, b) => {
-        const aAnalysis = analysisByRecordingId.get(a.id) || null;
-        const bAnalysis = analysisByRecordingId.get(b.id) || null;
-        const aStatus = getAnalysisBucket(aAnalysis?.status);
-        const bStatus = getAnalysisBucket(bAnalysis?.status);
-
-        if (statusOrder[aStatus] !== statusOrder[bStatus]) {
-          return statusOrder[aStatus] - statusOrder[bStatus];
-        }
-
-        const aWordCount = getTranscriptWordCount(a.transcript);
-        const bWordCount = getTranscriptWordCount(b.transcript);
-        if (aWordCount !== bWordCount) {
-          return bWordCount - aWordCount;
-        }
-
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      })
       .filter((recording) => {
         const analysis = analysisByRecordingId.get(recording.id) || null;
         const statusBucket = getAnalysisBucket(analysis?.status);
@@ -434,15 +434,70 @@ export default function Dashboard() {
 
         const name = getCallDisplayName(recording.file_name, analysis).toLowerCase();
         return name.includes(term);
+      })
+      .sort((a, b) => {
+        const aAnalysis = analysisByRecordingId.get(a.id) || null;
+        const bAnalysis = analysisByRecordingId.get(b.id) || null;
+        const aStatus = getAnalysisBucket(aAnalysis?.status);
+        const bStatus = getAnalysisBucket(bAnalysis?.status);
+
+        if (statusOrder[aStatus] !== statusOrder[bStatus]) {
+          return statusOrder[aStatus] - statusOrder[bStatus];
+        }
+
+        if (aStatus === "completed") {
+          const aWordCount = getTranscriptWordCount(a.transcript);
+          const bWordCount = getTranscriptWordCount(b.transcript);
+
+          if (aWordCount !== bWordCount) {
+            return bWordCount - aWordCount;
+          }
+        }
+
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
   }, [recordings, analysisByRecordingId, analysisStatusFilter, callSearch]);
 
-  const totalCallsPages = Math.max(1, Math.ceil(filteredSortedRecordings.length / CALLS_PER_PAGE));
+  const pinnedRecordings = useMemo(() => {
+    if (!pinnedCallIds.length) return [];
+
+    const byId = new Map(filteredSortedRecordings.map((recording) => [recording.id, recording]));
+
+    return pinnedCallIds
+      .map((id) => byId.get(id))
+      .filter((recording): recording is (typeof filteredSortedRecordings)[number] => Boolean(recording));
+  }, [filteredSortedRecordings, pinnedCallIds]);
+
+  const regularRecordings = useMemo(() => {
+    if (!pinnedCallIds.length) return filteredSortedRecordings;
+
+    const pinnedSet = new Set(pinnedCallIds);
+    return filteredSortedRecordings.filter((recording) => !pinnedSet.has(recording.id));
+  }, [filteredSortedRecordings, pinnedCallIds]);
+
+  const totalCallsPages = Math.max(1, Math.ceil(regularRecordings.length / CALLS_PER_PAGE));
   const paginatedRecordings = useMemo(() => {
     const start = (callsPage - 1) * CALLS_PER_PAGE;
     const end = start + CALLS_PER_PAGE;
-    return filteredSortedRecordings.slice(start, end);
-  }, [filteredSortedRecordings, callsPage]);
+    return regularRecordings.slice(start, end);
+  }, [regularRecordings, callsPage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(PINNED_CALLS_STORAGE_KEY, JSON.stringify(pinnedCallIds));
+  }, [pinnedCallIds]);
+
+  useEffect(() => {
+    const existingIds = new Set((recordings || []).map((recording) => recording.id));
+
+    setPinnedCallIds((prev) => {
+      const next = prev.filter((id) => existingIds.has(id));
+      if (next.length === prev.length && next.every((id, index) => id === prev[index])) {
+        return prev;
+      }
+      return next;
+    });
+  }, [recordings]);
 
   useEffect(() => {
     if (callsPage > totalCallsPages) {
@@ -467,7 +522,12 @@ export default function Dashboard() {
     setSearchParams({ tab, view: "dashboard" }, { replace: true });
   };
 
-  const handleRecordingAdded = () => {
+  const handleRecordingAdded = (recordingId?: string) => {
+    if (recordingId) {
+      setPinnedCallIds((prev) => [recordingId, ...prev.filter((id) => id !== recordingId)].slice(0, MAX_PINNED_CALLS));
+      setCallsPage(1);
+    }
+
     queryClient.invalidateQueries({ queryKey: ["recordings"] });
     queryClient.invalidateQueries({ queryKey: ["analyses"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
@@ -492,6 +552,7 @@ export default function Dashboard() {
 
     try {
       await deleteRecording.mutateAsync(recordingId);
+      setPinnedCallIds((prev) => prev.filter((id) => id !== recordingId));
       toast({
         title: "Deleted",
         description: `${fileName} was removed successfully.`,
@@ -546,6 +607,78 @@ export default function Dashboard() {
     }
 
     return <Badge variant="outline">Pending</Badge>;
+  };
+
+  const renderCallCard = (recording: Recording, isPinned = false) => {
+    const analysis = analysisByRecordingId.get(recording.id) || null;
+    const statusBucket = getAnalysisBucket(analysis?.status);
+    const ready = statusBucket === "completed";
+    const displayName = getCallDisplayName(recording.file_name, analysis);
+
+    return (
+      <Card key={recording.id} className={isPinned ? "border-primary/35 bg-primary/5" : "border-border"}>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-medium text-foreground">{displayName}</p>
+              {isPinned ? <Badge className="bg-primary text-primary-foreground">Recent Upload</Badge> : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>
+                {new Date(recording.created_at).toLocaleString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {getStatusBadge(analysis?.status)}
+            {ready ? (
+              <>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => handleRecordingClick(analysis)}
+                  title="Open Full Analysis"
+                  aria-label="Open Full Analysis"
+                >
+                  <FileText className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => openOverviewPanel(displayName, analysis)}
+                  title="Open Overview Panel"
+                  aria-label="Open Overview Panel"
+                >
+                  <PanelRightOpen className="h-4 w-4" />
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="outline" disabled>
+                {statusBucket === "processing" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-1 h-3.5 w-3.5" />}
+                Open Analysis
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-rose-600"
+              onClick={() => handleDeleteRecording(recording.id, displayName)}
+              disabled={deleteRecording.isPending}
+            >
+              <Trash2 className="mr-1 h-3.5 w-3.5" />
+              Delete
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
 
   if (isLoading || !dashboardData || !kpis) {
@@ -887,7 +1020,7 @@ export default function Dashboard() {
                     <p className="text-sm text-muted-foreground">Loading calls...</p>
                   </CardContent>
                 </Card>
-              ) : !filteredSortedRecordings.length ? (
+              ) : !pinnedRecordings.length && !regularRecordings.length ? (
                 <Card>
                   <CardContent className="py-10 text-center">
                     <p className="text-sm text-muted-foreground">No calls match the selected filters.</p>
@@ -895,121 +1028,67 @@ export default function Dashboard() {
                 </Card>
               ) : (
                 <div className="space-y-3">
-                  {paginatedRecordings.map((recording) => {
-                    const analysis = analysisByRecordingId.get(recording.id) || null;
-                    const ready = analysis?.status?.toLowerCase() === "completed";
-                    const displayName = getCallDisplayName(recording.file_name, analysis);
+                  {pinnedRecordings.length ? (
+                    <Card className="border-primary/30 bg-primary/5">
+                      <CardContent className="p-4">
+                        <p className="text-sm font-medium text-primary">Recent Uploads (Pinned On Top)</p>
+                        <p className="text-xs text-muted-foreground">Newly uploaded calls stay here even after completion.</p>
+                      </CardContent>
+                    </Card>
+                  ) : null}
 
-                    return (
-                      <Card key={recording.id} className="border-border">
-                        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                          <div className="space-y-1">
-                            <p className="font-medium text-foreground">{displayName}</p>
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              <span>
-                                {new Date(recording.created_at).toLocaleString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </span>
-                            </div>
-                          </div>
+                  {pinnedRecordings.map((recording) => renderCallCard(recording, true))}
+                  {paginatedRecordings.map((recording) => renderCallCard(recording))}
 
-                          <div className="flex items-center gap-2">
-                            {getStatusBadge(analysis?.status)}
-                            {ready ? (
-                              <>
+                  {regularRecordings.length ? (
+                    <Card className="border-border">
+                      <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                        <p className="text-sm text-muted-foreground">
+                          Page {callsPage} of {totalCallsPages} • Showing {(callsPage - 1) * CALLS_PER_PAGE + 1}
+                          -{Math.min(callsPage * CALLS_PER_PAGE, regularRecordings.length)} of {regularRecordings.length} calls
+                        </p>
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={callsPage === 1}
+                            onClick={() => setCallsPage((prev) => Math.max(1, prev - 1))}
+                          >
+                            Previous
+                          </Button>
+
+                          {Array.from({ length: totalCallsPages }, (_, index) => index + 1)
+                            .filter((page) => {
+                              if (totalCallsPages <= 7) return true;
+                              if (page === 1 || page === totalCallsPages) return true;
+                              return Math.abs(page - callsPage) <= 1;
+                            })
+                            .map((page, index, arr) => (
+                              <div key={page} className="flex items-center gap-2">
+                                {index > 0 && page - arr[index - 1] > 1 ? <span className="text-muted-foreground">...</span> : null}
                                 <Button
-                                  size="icon"
-                                  variant="outline"
-                                  onClick={() => handleRecordingClick(analysis)}
-                                  title="Open Full Analysis"
-                                  aria-label="Open Full Analysis"
+                                  variant={page === callsPage ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => setCallsPage(page)}
                                 >
-                                  <FileText className="h-4 w-4" />
+                                  {page}
                                 </Button>
-                                <Button
-                                  size="icon"
-                                  variant="outline"
-                                  onClick={() => openOverviewPanel(displayName, analysis)}
-                                  title="Open Overview Panel"
-                                  aria-label="Open Overview Panel"
-                                >
-                                  <PanelRightOpen className="h-4 w-4" />
-                                </Button>
-                              </>
-                            ) : (
-                              <Button size="sm" variant="outline" disabled>
-                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                                Processing
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-rose-600"
-                              onClick={() => handleDeleteRecording(recording.id, displayName)}
-                              disabled={deleteRecording.isPending}
-                            >
-                              <Trash2 className="mr-1 h-3.5 w-3.5" />
-                              Delete
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+                              </div>
+                            ))}
 
-                  <Card className="border-border">
-                    <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                      <p className="text-sm text-muted-foreground">
-                        Page {callsPage} of {totalCallsPages} • Showing {(callsPage - 1) * CALLS_PER_PAGE + 1}
-                        -{Math.min(callsPage * CALLS_PER_PAGE, filteredSortedRecordings.length)} of {filteredSortedRecordings.length} calls
-                      </p>
-
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={callsPage === 1}
-                          onClick={() => setCallsPage((prev) => Math.max(1, prev - 1))}
-                        >
-                          Previous
-                        </Button>
-
-                        {Array.from({ length: totalCallsPages }, (_, index) => index + 1)
-                          .filter((page) => {
-                            if (totalCallsPages <= 7) return true;
-                            if (page === 1 || page === totalCallsPages) return true;
-                            return Math.abs(page - callsPage) <= 1;
-                          })
-                          .map((page, index, arr) => (
-                            <div key={page} className="flex items-center gap-2">
-                              {index > 0 && page - arr[index - 1] > 1 ? <span className="text-muted-foreground">...</span> : null}
-                              <Button
-                                variant={page === callsPage ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => setCallsPage(page)}
-                              >
-                                {page}
-                              </Button>
-                            </div>
-                          ))}
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={callsPage === totalCallsPages}
-                          onClick={() => setCallsPage((prev) => Math.min(totalCallsPages, prev + 1))}
-                        >
-                          Next
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={callsPage === totalCallsPages}
+                            onClick={() => setCallsPage((prev) => Math.min(totalCallsPages, prev + 1))}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : null}
                 </div>
               )}
             </>

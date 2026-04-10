@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const WEBHOOK_URL = "https://n8nautomation.site/webhook/a9099f1a-02cb-45e8-8672-fd3d2d95adee";
+const WEBHOOK_URL = "https://n8nautomation.site/webhook/de6c3e04-816b-494d-9853-18e3b58cb3b5";
 
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
@@ -33,6 +33,24 @@ Deno.serve(async (req: Request) => {
     const responseText = await response.text();
     
     console.log('n8n webhook response:', response.status, responseText);
+
+    if (!response.ok) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          status: response.status,
+          message: 'Webhook target returned non-success status',
+          response: responseText,
+        }),
+        {
+          status: 502,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
+    }
 
     return new Response(
       JSON.stringify({

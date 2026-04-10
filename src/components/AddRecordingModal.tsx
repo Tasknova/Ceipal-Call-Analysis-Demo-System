@@ -20,10 +20,9 @@ import { Textarea } from "@/components/ui/textarea";
 interface AddRecordingModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onRecordingAdded?: () => void;
+  onRecordingAdded?: (recordingId?: string) => void;
 }
 
-const WEBHOOK_URL = "https://lfpsgpumofgdhpihzqgp.supabase.co/functions/v1/webhook-proxy";
 const STORAGE_BUCKET = "call-recordings";
 
 const validateAudioFile = (file: File): { isValid: boolean; error?: string } => {
@@ -62,17 +61,20 @@ const validateAudioFile = (file: File): { isValid: boolean; error?: string } => 
   return { isValid: true };
 };
 
-const sendWebhookInBackground = async (webhookPayload: Record<string, unknown>) => {
+const sendWebhook = async (webhookPayload: Record<string, unknown>): Promise<boolean> => {
   try {
-    await fetch(WEBHOOK_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(webhookPayload),
+    const { error } = await supabase.functions.invoke("webhook-proxy", {
+      body: webhookPayload,
     });
+
+    if (error) {
+      throw error;
+    }
+
+    return true;
   } catch (error) {
     console.warn("Webhook submission failed", error);
+    return false;
   }
 };
 
@@ -246,7 +248,7 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
         console.warn("Failed to create analysis record", analysisError);
       }
 
-      sendWebhookInBackground({
+      const webhookSent = await sendWebhook({
         recording_id: recording.id,
         analysis_id: analysis?.id || null,
         recording_name: fileName.trim(),
@@ -254,16 +256,35 @@ export default function AddRecordingModal({ open, onOpenChange, onRecordingAdded
         transcript: inputMode === "transcript" ? transcript.trim() : null,
       });
 
+      if (webhookSent && analysis?.id) {
+        const { error: statusUpdateError } = await supabase
+          .from("analysis")
+          .update({ status: "processing" })
+          .eq("id", analysis.id);
+
+        if (statusUpdateError) {
+          console.warn("Failed to update analysis status to processing", statusUpdateError);
+        }
+      }
+
       setUploadProgress(100);
 
-      toast({
-        title: "Call added",
-        description: "The call has been queued for analysis.",
-      });
+      if (webhookSent) {
+        toast({
+          title: "Call added",
+          description: "The call has been queued for analysis.",
+        });
+      } else {
+        toast({
+          title: "Call added with warning",
+          description: "The call was saved, but automation trigger failed. Please retry.",
+          variant: "destructive",
+        });
+      }
 
       resetForm();
       onOpenChange(false);
-      onRecordingAdded?.();
+      onRecordingAdded?.(recording.id);
     } catch (error) {
       toast({
         title: "Upload failed",
