@@ -899,7 +899,6 @@ export default function Dashboard() {
                     const analysis = analysisByRecordingId.get(recording.id) || null;
                     const ready = analysis?.status?.toLowerCase() === "completed";
                     const displayName = getCallDisplayName(recording.file_name, analysis);
-                    const transcriptWordCount = getTranscriptWordCount(recording.transcript);
 
                     return (
                       <Card key={recording.id} className="border-border">
@@ -916,8 +915,6 @@ export default function Dashboard() {
                                   minute: "2-digit",
                                 })}
                               </span>
-                              <span>•</span>
-                              <span>Transcript Words: {transcriptWordCount}</span>
                             </div>
                           </div>
 
